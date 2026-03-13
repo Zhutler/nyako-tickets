@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <style>
+        body { font-family: sans-serif; background: #1a1a1a; color: white; text-align: center; padding: 20px; }
+        .ticket-card { border: 1px solid #333; border-radius: 15px; padding: 15px; margin: 10px; background: #252525; }
+        .btn { background: #0088cc; color: white; border: none; padding: 10px 20px; border-radius: 8px; cursor: pointer; }
+        h2 { color: #0088cc; }
+    </style>
+</head>
+<body>
+    <h2>Nyako Tickets</h2>
+    <div class="ticket-card">
+        <h3>Входной билет</h3>
+        <p>Цена: 300 грн</p>
+        <button class="btn" onclick="buy('Входной (300 грн)')">Выбрать</button>
+    </div>
+    <div class="ticket-card">
+        <h3>VIP Билет</h3>
+        <p>Цена: 600 грн</p>
+        <button class="btn" onclick="buy('VIP (600 грн)')">Выбрать</button>
+    </div>
+
+    <script>
+        const tg = window.Telegram.WebApp;
+        tg.expand(); // Разворачиваем на весь экран
+
+        function buy(type) {
+            tg.sendData(type); // Отправляем название билета обратно в чат боту
+            tg.close(); // Закрываем аппку
+        }
+    </script>
+</body>
+</html>
