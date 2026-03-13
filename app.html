@@ -27,82 +27,29 @@
             align-items: center;
         }
 
-        .header {
-            text-align: center;
-            margin-bottom: 30px;
-        }
-
+        .header { text-align: center; margin-bottom: 30px; }
         .header h1 {
-            font-size: 28px;
-            font-weight: 800;
-            margin: 0;
-            background: -webkit-linear-gradient(45deg, #ff6b6b, #c0392b);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-            letter-spacing: -0.5px;
+            font-size: 28px; font-weight: 800; margin: 0;
+            background: linear-gradient(45deg, #ff6b6b, #c0392b);
+            -webkit-background-clip: text; -webkit-text-fill-color: transparent;
         }
-
-        .header p {
-            color: var(--text-muted);
-            font-size: 14px;
-            margin-top: 5px;
-        }
+        .header p { color: var(--text-muted); font-size: 14px; margin-top: 5px; }
 
         .ticket-card {
-            background-color: var(--card-bg);
-            border-radius: 20px;
-            padding: 24px;
-            width: 100%;
-            max-width: 350px;
-            margin-bottom: 16px;
-            box-shadow: 0 10px 20px rgba(0,0,0,0.2);
-            border: 1px solid rgba(255,255,255,0.05);
-            transition: transform 0.1s ease;
+            background-color: var(--card-bg); border-radius: 20px; padding: 24px;
+            width: 100%; max-width: 350px; margin-bottom: 16px;
+            box-shadow: 0 10px 20px rgba(0,0,0,0.2); border: 1px solid rgba(255,255,255,0.05);
         }
 
-        .ticket-card:active {
-            transform: scale(0.97);
-        }
-
-        .card-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 8px;
-        }
-
-        .card-title {
-            font-size: 22px;
-            font-weight: 700;
-            margin: 0;
-        }
-
-        .price {
-            font-size: 20px;
-            font-weight: 800;
-            color: #fff;
-        }
-
-        .desc {
-            color: var(--text-muted);
-            font-size: 14px;
-            line-height: 1.5;
-            margin-bottom: 20px;
-        }
+        .card-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
+        .card-title { font-size: 22px; font-weight: 700; margin: 0; }
+        .price { font-size: 20px; font-weight: 800; color: #fff; }
+        .desc { color: var(--text-muted); font-size: 14px; line-height: 1.5; margin-bottom: 20px; }
 
         .btn {
-            width: 100%;
-            padding: 16px;
-            border-radius: 14px;
-            border: none;
-            font-size: 16px;
-            font-weight: 700;
-            color: white;
-            cursor: pointer;
-            text-transform: uppercase;
-            letter-spacing: 0.5px;
+            width: 100%; padding: 16px; border-radius: 14px; border: none;
+            font-size: 16px; font-weight: 700; color: white; cursor: pointer; text-transform: uppercase;
         }
-
         .btn-base { background: var(--accent-blue); }
         .btn-vip { background: var(--accent-pink); }
     </style>
@@ -128,7 +75,7 @@
             <h2 class="card-title">VIP 👑</h2>
             <div class="price">600 ₴</div>
         </div>
-        <div class="desc">Ранний вход, место в первом ряду на косплей-шоу, эксклюзивный мерч и респект.</div>
+        <div class="desc">Ранний вход, место в первом ряду на шоу, эксклюзивный мерч и респект.</div>
         <button class="btn btn-vip" onclick="buyTicket('VIP (600 грн)')">Взять VIP</button>
     </div>
 
