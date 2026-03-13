@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <style>
+        body { background: #0f0f13; color: white; font-family: sans-serif; text-align: center; padding: 50px; }
+        h2 { color: #8e8e93; font-size: 18px; }
+    </style>
+</head>
+<body>
+    <h2>Відкриваємо камеру...</h2>
+    <script>
+        const tg = window.Telegram.WebApp;
+        tg.expand();
+        
+        // Дергаем нативный сканер телеграма
+        tg.showScanQrPopup({ text: "Наведи камеру на QR-код квитка" }, function(text) {
+            tg.sendData("SCAN:" + text); // Отправляем результат боту с пометкой SCAN
+            tg.closeScanQrPopup();
+            tg.close();
+            return true;
+        });
+    </script>
+</body>
+</html>
