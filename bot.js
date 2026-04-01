@@ -4,12 +4,12 @@ const fs = require('fs');
 const path = require('path');
 
 const bot = new Telegraf('8770505563:AAEE8UeScHMw-4zJekTODyVuHUdtGcr0K9Q'); 
-const ADMIN_IDS = ['789355423', '821782817', '5690029894']; // Вставь реальный ID Хироши
+const ADMIN_IDS = ['789355423', '821782817', '5690029894']; // Не забудь айди Хироши
 const APP_URL = 'https://zhutler.github.io/nyako-tickets/app.html?v=5';
 const SCANNER_URL = 'https://zhutler.github.io/nyako-tickets/scanner.html?v=1';
 
 const dbPath = '/data/tickets.json';
-// Хранилище для синхронизации кнопок (userId -> {amount, type, adminMsgs: [{chatId, msgId}]})
+// Хранилище для синхронизации кнопок
 let pendingRequests = {};
 
 if (!fs.existsSync('/data')) {
@@ -39,10 +39,14 @@ bot.on('message', async (ctx, next) => {
         try {
             const data = JSON.parse(ctx.message.web_app_data.data);
             const userId = ctx.from.id;
-            // Запоминаем, что юзер выбрал
+            
+            // Фикс математики: проверяем по названию билета
+            const price = data.ticket === 'Класичний' ? 300 : 250;
+            const totalSum = data.count * price;
+            
             pendingRequests[userId] = { ticketType: data.ticket, count: data.count, adminMsgs: [] };
             
-            return ctx.reply(`Обрано: ${data.ticket} — ${data.count} шт.\n\nСума: ${data.count * (data.ticket.includes('300') ? 300 : 250)} ₴\nКартка: 💳 4149 6090 6948 0624\n\nКидай скрін чека!`);
+            return ctx.reply(`Обрано: ${data.ticket} — ${data.count} шт.\n\nСума: ${totalSum} ₴\nКартка: 💳 4149 6090 6948 0624\n\nКидай скрін чека!`);
         } catch (e) {
             return ctx.reply('Помилка даних. Спробуй ще раз.');
         }
@@ -95,11 +99,9 @@ bot.action(/confirm_(.+)/, async (ctx) => {
         
         saveDB(db);
         
-        // Шлем пачку QR-кодов юзеру
         await ctx.telegram.sendMessage(userId, `Оплата підтверджена! Твої квитки (${req.count} шт.):`);
         await ctx.telegram.sendMediaGroup(userId, ticketsToSend);
 
-        // Убираем кнопки у ВСЕХ админов
         for (const m of req.adminMsgs) {
             try {
                 await ctx.telegram.editMessageCaption(m.chatId, m.messageId, undefined, `✅ Схвалено адміном @${ctx.from.username || ctx.from.id}\nКвитки: ${req.ticketType} (${req.count} шт.)`);
@@ -128,4 +130,7 @@ bot.action(/reject_(.+)/, async (ctx) => {
 });
 
 bot.launch();
-console.log('Бот Nyako-kon з синхронізацією адмінів запущено!');
+console.log('Бот Nyako-kon з синхронізацією адмінів запущено (математика пофікшена)!');
+
+process.once('SIGINT', () => bot.stop('SIGINT'));
+process.once('SIGTERM', () => bot.stop('SIGTERM'));
