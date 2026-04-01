@@ -4,14 +4,15 @@ const fs = require('fs');
 const path = require('path');
 
 const bot = new Telegraf('8770505563:AAEE8UeScHMw-4zJekTODyVuHUdtGcr0K9Q'); 
-const ADMIN_ID = '789355423'; 
+
+// ТЕПЕРЬ ТУТ СПИСОК АДМИНОВ (Твой и Хироши)
+const ADMIN_IDS = ['789355423', 'ТУТ_ID_ХИРОШИ']; // Замени ТУТ_ID_ХИРОШИ на его реальные цифры
+
 const APP_URL = 'https://zhutler.github.io/nyako-tickets/app.html?v=4';
 const SCANNER_URL = 'https://zhutler.github.io/nyako-tickets/scanner.html?v=1';
 
-// Шлях для Railway Volume (папка /data не стирається при перезапуску)
 const dbPath = '/data/tickets.json';
 
-// Перевірка та створення бази
 if (!fs.existsSync('/data')) {
     try { fs.mkdirSync('/data'); } catch (e) { console.log('Папка /data відсутня (локальний запуск)'); }
 }
@@ -28,7 +29,8 @@ function saveDB(data) {
 }
 
 bot.start((ctx) => {
-    const isAdmin = ctx.from.id.toString() === ADMIN_ID;
+    // Перевіряємо, чи є ID юзера у списку адмінів
+    const isAdmin = ADMIN_IDS.includes(ctx.from.id.toString());
     const buttons = [[Markup.button.webApp('Купити квиток 🎟', APP_URL)]];
     
     if (isAdmin) {
@@ -57,7 +59,7 @@ bot.on('message', async (ctx, next) => {
             return ctx.reply('✅ Прохід дозволено! Квиток погашено.');
         }
         
-        return ctx.reply(`Прийнято! Твій вибір: ${data}.\n\nТепер переказуй гроші на картку:\n💳 4149609069480624\n\nІ кидай сюди скрін чека прямо в цей чат! Чекаємо.`);
+        return ctx.reply(`Прийнято! Твій вибір: ${data}.\n\nТепер переказуй гроші на картку:\n💳 4149 6090 6948 0624\n\nІ кидай сюди скрін чека прямо в цей чат! Чекаємо.`);
     }
     return next();
 });
@@ -66,21 +68,34 @@ bot.on('photo', async (ctx) => {
     const fileId = ctx.message.photo[ctx.message.photo.length - 1].file_id;
     const userId = ctx.message.from.id;
 
-    await ctx.telegram.sendPhoto(ADMIN_ID, fileId, {
-        caption: `Новий чек від @${ctx.message.from.username || userId}\nUser ID: ${userId}`,
-        reply_markup: {
-            inline_keyboard: [
-                [{ text: '✅ Підтвердити', callback_data: `confirm_${userId}` }],
-                [{ text: '❌ Відхилити', callback_data: `reject_${userId}` }]
-            ]
+    // Рассылаем уведомление о новом чеке ВСЕМ админам из списка
+    for (const adminId of ADMIN_IDS) {
+        try {
+            await ctx.telegram.sendPhoto(adminId, fileId, {
+                caption: `Новий чек від @${ctx.message.from.username || userId}\nUser ID: ${userId}`,
+                reply_markup: {
+                    inline_keyboard: [
+                        [{ text: '✅ Підтвердити', callback_data: `confirm_${userId}` }],
+                        [{ text: '❌ Відхилити', callback_data: `reject_${userId}` }]
+                    ]
+                }
+            });
+        } catch (e) {
+            console.log(`Не вдалося надіслати адміну ${adminId}:`, e.message);
         }
-    });
+    }
 
     ctx.reply('Чек полетів до оргів на перевірку! Зроби чайку, скоро скинемо квиток.');
 });
 
 bot.action(/confirm_(.+)/, async (ctx) => {
     const userId = ctx.match[1];
+    
+    // Проверка, что на кнопку нажал именно админ
+    if (!ADMIN_IDS.includes(ctx.from.id.toString())) {
+        return ctx.answerCbQuery('Ти не орг, не клацай!');
+    }
+
     const ticketId = `NYAKO_${userId}_${Math.random().toString(36).substring(7)}`;
     
     try {
@@ -92,6 +107,8 @@ bot.action(/confirm_(.+)/, async (ctx) => {
         await ctx.telegram.sendPhoto(userId, { source: qrBuffer }, {
             caption: 'Оплата підтверджена! 🎉 Ось твій QR-квиток. Збережи його, покажеш волонтерам на вході.'
         });
+        
+        // Убираем кнопки у всех админов (чтобы не подтвердили дважды)
         await ctx.editMessageCaption('✅ Схвалено. Квиток відправлено.');
     } catch (err) {
         ctx.reply('Помилка генерації QR.');
@@ -99,10 +116,15 @@ bot.action(/confirm_(.+)/, async (ctx) => {
 });
 
 bot.action(/reject_(.+)/, async (ctx) => {
+    if (!ADMIN_IDS.includes(ctx.from.id.toString())) return ctx.answerCbQuery('Тобі не можна!');
+    
     const userId = ctx.match[1];
     await ctx.telegram.sendMessage(userId, 'Твій чек відхилено ❌. Напиши оргам, якщо це помилка.');
     await ctx.editMessageCaption('❌ Відхилено.');
 });
 
 bot.launch();
-console.log('Бот на Railway стартував!');
+console.log('Бот на Railway стартував! Адміни додані.');
+
+process.once('SIGINT', () => bot.stop('SIGINT'));
+process.once('SIGTERM', () => bot.stop('SIGTERM'));
