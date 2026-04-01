@@ -4,7 +4,7 @@ const fs = require('fs');
 const path = require('path');
 
 const bot = new Telegraf('8770505563:AAEE8UeScHMw-4zJekTODyVuHUdtGcr0K9Q'); 
-const ADMIN_ID = '789355423'; 
+const ADMIN_ID = '789355423''821782817'; 
 const APP_URL = 'https://zhutler.github.io/nyako-tickets/app.html?v=4';
 const SCANNER_URL = 'https://zhutler.github.io/nyako-tickets/scanner.html?v=1';
 
