@@ -9,9 +9,9 @@ const APP_URL = 'https://zhutler.github.io/nyako-tickets/app.html?v=5';
 const SCANNER_URL = 'https://zhutler.github.io/nyako-tickets/scanner.html?v=1';
 
 const dbPath = '/data/tickets.json';
-// Хранилище для синхронизации кнопок
-let pendingRequests = {};
+const reqDbPath = '/data/requests.json';
 
+// Створюємо папку, якщо локальний тест
 if (!fs.existsSync('/data')) {
     try { fs.mkdirSync('/data'); } catch (e) { console.log('Папка /data відсутня'); }
 }
@@ -24,6 +24,17 @@ function loadDB() {
 
 function saveDB(data) {
     const currentPath = fs.existsSync('/data') ? dbPath : path.join(__dirname, 'tickets.json');
+    fs.writeFileSync(currentPath, JSON.stringify(data, null, 2));
+}
+
+function loadReqDB() {
+    const currentPath = fs.existsSync(reqDbPath) ? reqDbPath : path.join(__dirname, 'requests.json');
+    if (!fs.existsSync(currentPath)) fs.writeFileSync(currentPath, JSON.stringify({}));
+    return JSON.parse(fs.readFileSync(currentPath));
+}
+
+function saveReqDB(data) {
+    const currentPath = fs.existsSync('/data') ? reqDbPath : path.join(__dirname, 'requests.json');
     fs.writeFileSync(currentPath, JSON.stringify(data, null, 2));
 }
 
@@ -40,13 +51,15 @@ bot.on('message', async (ctx, next) => {
             const data = JSON.parse(ctx.message.web_app_data.data);
             const userId = ctx.from.id;
             
-            // Фикс математики: проверяем по названию билета
             const price = data.ticket === 'Класичний' ? 300 : 250;
             const totalSum = data.count * price;
             
-            pendingRequests[userId] = { ticketType: data.ticket, count: data.count, adminMsgs: [] };
+            // Зберігаємо запит на жорсткий диск
+            const reqDb = loadReqDB();
+            reqDb[userId] = { ticketType: data.ticket, count: data.count, adminMsgs: [] };
+            saveReqDB(reqDb);
             
-            return ctx.reply(`Обрано: ${data.ticket} — ${data.count} шт.\n\nСума: ${totalSum} ₴\nКартка: 💳 4149 6090 6948 0624\n\nКидай скрін чека!`);
+            return ctx.reply(`Обрано: ${data.ticket} - ${data.count} шт.\n\nСума: ${totalSum} ₴\nКартка: 💳 4149 6090 6948 0624\n\nКидай скрін чека!`);
         } catch (e) {
             return ctx.reply('Помилка даних. Спробуй ще раз.');
         }
@@ -56,7 +69,10 @@ bot.on('message', async (ctx, next) => {
 
 bot.on('photo', async (ctx) => {
     const userId = ctx.from.id;
-    const req = pendingRequests[userId];
+    
+    // Читаємо з бази запитів
+    const reqDb = loadReqDB();
+    const req = reqDb[userId];
     
     if (!req) return ctx.reply('Спочатку обери квитки через кнопку!');
 
@@ -76,6 +92,8 @@ bot.on('photo', async (ctx) => {
             req.adminMsgs.push({ chatId: adminId, messageId: msg.message_id });
         } catch (e) { console.log(e); }
     }
+    
+    saveReqDB(reqDb);
     ctx.reply('Чек полетів до оргів! Очікуй.');
 });
 
@@ -83,7 +101,8 @@ bot.action(/confirm_(.+)/, async (ctx) => {
     const userId = ctx.match[1];
     if (!ADMIN_IDS.includes(ctx.from.id.toString())) return ctx.answerCbQuery('Тільки для оргів!');
 
-    const req = pendingRequests[userId];
+    const reqDb = loadReqDB();
+    const req = reqDb[userId];
     if (!req) return ctx.answerCbQuery('Запит застарів або вже оброблений.');
 
     try {
@@ -108,7 +127,8 @@ bot.action(/confirm_(.+)/, async (ctx) => {
             } catch (e) { console.log('Не вдалося оновити кнопки'); }
         }
         
-        delete pendingRequests[userId];
+        delete reqDb[userId];
+        saveReqDB(reqDb);
     } catch (err) {
         console.log(err);
         ctx.reply('Помилка при створенні квитків.');
@@ -119,18 +139,21 @@ bot.action(/reject_(.+)/, async (ctx) => {
     const userId = ctx.match[1];
     if (!ADMIN_IDS.includes(ctx.from.id.toString())) return;
 
-    const req = pendingRequests[userId];
+    const reqDb = loadReqDB();
+    const req = reqDb[userId];
     if (req) {
         for (const m of req.adminMsgs) {
             try { await ctx.telegram.editMessageCaption(m.chatId, m.messageId, undefined, `❌ Відхилено адміном @${ctx.from.username}`); } catch(e){}
         }
         await ctx.telegram.sendMessage(userId, 'Твій чек відхилено. Звернись до оргів.');
-        delete pendingRequests[userId];
+        
+        delete reqDb[userId];
+        saveReqDB(reqDb);
     }
 });
 
 bot.launch();
-console.log('Бот Nyako-kon з синхронізацією адмінів запущено (математика пофікшена)!');
+console.log('Бот Nyako-kon з синхронізацією адмінів та вічною пам\'яттю запущено!');
 
 process.once('SIGINT', () => bot.stop('SIGINT'));
 process.once('SIGTERM', () => bot.stop('SIGTERM'));
