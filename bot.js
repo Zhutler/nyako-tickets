@@ -4,17 +4,16 @@ const fs = require('fs');
 const path = require('path');
 
 const bot = new Telegraf('8770505563:AAEE8UeScHMw-4zJekTODyVuHUdtGcr0K9Q'); 
-
-// ТЕПЕРЬ ТУТ СПИСОК АДМИНОВ (Твой и Хироши)
-const ADMIN_IDS = ['789355423', '821782817']; // Замени ТУТ_ID_ХИРОШИ на его реальные цифры
-
-const APP_URL = 'https://zhutler.github.io/nyako-tickets/app.html?v=4';
+const ADMIN_IDS = ['789355423', '821782817', '5690029894']; // Вставь реальный ID Хироши
+const APP_URL = 'https://zhutler.github.io/nyako-tickets/app.html?v=5';
 const SCANNER_URL = 'https://zhutler.github.io/nyako-tickets/scanner.html?v=1';
 
 const dbPath = '/data/tickets.json';
+// Хранилище для синхронизации кнопок (userId -> {amount, type, adminMsgs: [{chatId, msgId}]})
+let pendingRequests = {};
 
 if (!fs.existsSync('/data')) {
-    try { fs.mkdirSync('/data'); } catch (e) { console.log('Папка /data відсутня (локальний запуск)'); }
+    try { fs.mkdirSync('/data'); } catch (e) { console.log('Папка /data відсутня'); }
 }
 
 function loadDB() {
@@ -29,50 +28,40 @@ function saveDB(data) {
 }
 
 bot.start((ctx) => {
-    // Перевіряємо, чи є ID юзера у списку адмінів
     const isAdmin = ADMIN_IDS.includes(ctx.from.id.toString());
     const buttons = [[Markup.button.webApp('Купити квиток 🎟', APP_URL)]];
-    
-    if (isAdmin) {
-        buttons.push([Markup.button.webApp('📷 Сканер квитків (Адмін)', SCANNER_URL)]);
-    }
-
-    ctx.reply(
-        'Йо! Вітаємо в офіційному боті Nyako-kon. 🎫\n\nТисни на кнопку, обирай свій квиток, а потім просто кидай чек про оплату сюди в чат.',
-        Markup.keyboard(buttons).resize()
-    );
+    if (isAdmin) buttons.push([Markup.button.webApp('📷 Сканер квитків (Адмін)', SCANNER_URL)]);
+    ctx.reply('Вітаємо на Nyako-kon! 🎫', Markup.keyboard(buttons).resize());
 });
 
 bot.on('message', async (ctx, next) => {
     if (ctx.message && ctx.message.web_app_data) {
-        const data = ctx.message.web_app_data.data;
-        
-        if (data.startsWith('SCAN:')) {
-            const ticketId = data.replace('SCAN:', '');
-            const db = loadDB();
+        try {
+            const data = JSON.parse(ctx.message.web_app_data.data);
+            const userId = ctx.from.id;
+            // Запоминаем, что юзер выбрал
+            pendingRequests[userId] = { ticketType: data.ticket, count: data.count, adminMsgs: [] };
             
-            if (!db[ticketId]) return ctx.reply('❌ Паль! Такого квитка не існує.');
-            if (db[ticketId].used) return ctx.reply('⚠️ Увага! Квиток вже використано.');
-            
-            db[ticketId].used = true;
-            saveDB(db);
-            return ctx.reply('✅ Прохід дозволено! Квиток погашено.');
+            return ctx.reply(`Обрано: ${data.ticket} — ${data.count} шт.\n\nСума: ${data.count * (data.ticket.includes('300') ? 300 : 250)} ₴\nКартка: 💳 4149 6090 6948 0624\n\nКидай скрін чека!`);
+        } catch (e) {
+            return ctx.reply('Помилка даних. Спробуй ще раз.');
         }
-        
-        return ctx.reply(`Прийнято! Твій вибір: ${data}.\n\nТепер переказуй гроші на картку:\n💳 4149 6090 6948 0624\n\nІ кидай сюди скрін чека прямо в цей чат! Чекаємо.`);
     }
     return next();
 });
 
 bot.on('photo', async (ctx) => {
-    const fileId = ctx.message.photo[ctx.message.photo.length - 1].file_id;
-    const userId = ctx.message.from.id;
+    const userId = ctx.from.id;
+    const req = pendingRequests[userId];
+    
+    if (!req) return ctx.reply('Спочатку обери квитки через кнопку!');
 
-    // Рассылаем уведомление о новом чеке ВСЕМ админам из списка
+    const fileId = ctx.message.photo[ctx.message.photo.length - 1].file_id;
+    
     for (const adminId of ADMIN_IDS) {
         try {
-            await ctx.telegram.sendPhoto(adminId, fileId, {
-                caption: `Новий чек від @${ctx.message.from.username || userId}\nUser ID: ${userId}`,
+            const msg = await ctx.telegram.sendPhoto(adminId, fileId, {
+                caption: `Чек від @${ctx.message.from.username || userId}\nКвитки: ${req.ticketType} (${req.count} шт.)`,
                 reply_markup: {
                     inline_keyboard: [
                         [{ text: '✅ Підтвердити', callback_data: `confirm_${userId}` }],
@@ -80,51 +69,63 @@ bot.on('photo', async (ctx) => {
                     ]
                 }
             });
-        } catch (e) {
-            console.log(`Не вдалося надіслати адміну ${adminId}:`, e.message);
-        }
+            req.adminMsgs.push({ chatId: adminId, messageId: msg.message_id });
+        } catch (e) { console.log(e); }
     }
-
-    ctx.reply('Чек полетів до оргів на перевірку! Зроби чайку, скоро скинемо квиток.');
+    ctx.reply('Чек полетів до оргів! Очікуй.');
 });
 
 bot.action(/confirm_(.+)/, async (ctx) => {
     const userId = ctx.match[1];
-    
-    // Проверка, что на кнопку нажал именно админ
-    if (!ADMIN_IDS.includes(ctx.from.id.toString())) {
-        return ctx.answerCbQuery('Ти не орг, не клацай!');
-    }
+    if (!ADMIN_IDS.includes(ctx.from.id.toString())) return ctx.answerCbQuery('Тільки для оргів!');
 
-    const ticketId = `NYAKO_${userId}_${Math.random().toString(36).substring(7)}`;
-    
+    const req = pendingRequests[userId];
+    if (!req) return ctx.answerCbQuery('Запит застарів або вже оброблений.');
+
     try {
         const db = loadDB();
-        db[ticketId] = { used: false, owner: userId, date: new Date().toISOString() };
-        saveDB(db);
+        const ticketsToSend = [];
 
-        const qrBuffer = await QRCode.toBuffer(ticketId);
-        await ctx.telegram.sendPhoto(userId, { source: qrBuffer }, {
-            caption: 'Оплата підтверджена! 🎉 Ось твій QR-квиток. Збережи його, покажеш волонтерам на вході.'
-        });
+        for (let i = 0; i < req.count; i++) {
+            const tId = `NYAKO_${userId}_${Math.random().toString(36).substring(7)}`;
+            db[tId] = { used: false, owner: userId, type: req.ticketType, date: new Date().toISOString() };
+            const qrBuf = await QRCode.toBuffer(tId);
+            ticketsToSend.push({ type: 'photo', media: { source: qrBuf } });
+        }
         
-        // Убираем кнопки у всех админов (чтобы не подтвердили дважды)
-        await ctx.editMessageCaption('✅ Схвалено. Квиток відправлено.');
+        saveDB(db);
+        
+        // Шлем пачку QR-кодов юзеру
+        await ctx.telegram.sendMessage(userId, `Оплата підтверджена! Твої квитки (${req.count} шт.):`);
+        await ctx.telegram.sendMediaGroup(userId, ticketsToSend);
+
+        // Убираем кнопки у ВСЕХ админов
+        for (const m of req.adminMsgs) {
+            try {
+                await ctx.telegram.editMessageCaption(m.chatId, m.messageId, undefined, `✅ Схвалено адміном @${ctx.from.username || ctx.from.id}\nКвитки: ${req.ticketType} (${req.count} шт.)`);
+            } catch (e) { console.log('Не вдалося оновити кнопки'); }
+        }
+        
+        delete pendingRequests[userId];
     } catch (err) {
-        ctx.reply('Помилка генерації QR.');
+        console.log(err);
+        ctx.reply('Помилка при створенні квитків.');
     }
 });
 
 bot.action(/reject_(.+)/, async (ctx) => {
-    if (!ADMIN_IDS.includes(ctx.from.id.toString())) return ctx.answerCbQuery('Тобі не можна!');
-    
     const userId = ctx.match[1];
-    await ctx.telegram.sendMessage(userId, 'Твій чек відхилено ❌. Напиши оргам, якщо це помилка.');
-    await ctx.editMessageCaption('❌ Відхилено.');
+    if (!ADMIN_IDS.includes(ctx.from.id.toString())) return;
+
+    const req = pendingRequests[userId];
+    if (req) {
+        for (const m of req.adminMsgs) {
+            try { await ctx.telegram.editMessageCaption(m.chatId, m.messageId, undefined, `❌ Відхилено адміном @${ctx.from.username}`); } catch(e){}
+        }
+        await ctx.telegram.sendMessage(userId, 'Твій чек відхилено. Звернись до оргів.');
+        delete pendingRequests[userId];
+    }
 });
 
 bot.launch();
-console.log('Бот на Railway стартував! Адміни додані.');
-
-process.once('SIGINT', () => bot.stop('SIGINT'));
-process.once('SIGTERM', () => bot.stop('SIGTERM'));
+console.log('Бот Nyako-kon з синхронізацією адмінів запущено!');
