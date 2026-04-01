@@ -6,88 +6,65 @@
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <style>
         :root {
-            --bg-color: #0f0f13;
-            --card-bg: #1c1c24;
-            --text-main: #ffffff;
-            --text-muted: #8e8e93;
+            --bg-color: #0f0f13; --card-bg: #1c1c24; --text-main: #ffffff; --text-muted: #8e8e93;
             --accent-blue: linear-gradient(135deg, #00c6ff 0%, #0072ff 100%);
             --accent-pink: linear-gradient(135deg, #ff0844 0%, #ffb199 100%);
         }
-
         * { box-sizing: border-box; }
-
-        body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
-            background-color: var(--bg-color);
-            color: var(--text-main);
-            margin: 0;
-            padding: 20px 15px;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-        }
-
-        .header { text-align: center; margin-bottom: 30px; }
-        .header h1 {
-            font-size: 28px; font-weight: 800; margin: 0;
-            background: linear-gradient(45deg, #ff6b6b, #c0392b);
-            -webkit-background-clip: text; -webkit-text-fill-color: transparent;
-        }
-        .header p { color: var(--text-muted); font-size: 14px; margin-top: 5px; }
-
-        .ticket-card {
-            background-color: var(--card-bg); border-radius: 20px; padding: 24px;
-            width: 100%; max-width: 350px; margin-bottom: 16px;
-            box-shadow: 0 10px 20px rgba(0,0,0,0.2); border: 1px solid rgba(255,255,255,0.05);
-        }
-
-        .card-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
-        .card-title { font-size: 22px; font-weight: 700; margin: 0; }
-        .price { font-size: 20px; font-weight: 800; color: #fff; }
-        .desc { color: var(--text-muted); font-size: 14px; line-height: 1.5; margin-bottom: 20px; }
-
-        .btn {
-            width: 100%; padding: 16px; border-radius: 14px; border: none;
-            font-size: 16px; font-weight: 700; color: white; cursor: pointer; text-transform: uppercase;
-        }
+        body { font-family: sans-serif; background-color: var(--bg-color); color: var(--text-main); margin: 0; padding: 20px 15px; display: flex; flex-direction: column; align-items: center; }
+        .header { text-align: center; margin-bottom: 20px; }
+        .header h1 { font-size: 28px; margin: 0; background: linear-gradient(45deg, #ff6b6b, #c0392b); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+        .ticket-card { background-color: var(--card-bg); border-radius: 20px; padding: 20px; width: 100%; max-width: 350px; margin-bottom: 16px; border: 1px solid rgba(255,255,255,0.05); }
+        .price { font-size: 20px; font-weight: 800; }
+        .desc { color: var(--text-muted); font-size: 14px; margin: 10px 0; }
+        .counter { display: flex; align-items: center; justify-content: center; margin: 15px 0; gap: 20px; }
+        .count-btn { background: #333; border: none; color: white; width: 40px; height: 40px; border-radius: 10px; font-size: 20px; cursor: pointer; }
+        .count-val { font-size: 22px; font-weight: bold; width: 30px; text-align: center; }
+        .btn { width: 100%; padding: 16px; border-radius: 14px; border: none; font-size: 16px; font-weight: 700; color: white; cursor: pointer; text-transform: uppercase; }
         .btn-base { background: var(--accent-blue); }
         .btn-vip { background: var(--accent-pink); }
     </style>
 </head>
 <body>
+    <div class="header"><h1>✨ Nyako-kon</h1><p>Оберіть квитки</p></div>
 
-    <div class="header">
-        <h1>✨ Nyako-kon</h1>
-        <p>Офіційний продаж квитків</p>
+    <div class="ticket-card">
+        <div style="display:flex; justify-content: space-between; align-items:center;">
+            <h3>Класичний</h3><div class="price">300 ₴</div>
+        </div>
+        <p class="desc">Доступ до всіх зон фестивалю.</p>
+        <div class="counter">
+            <button class="count-btn" onclick="change(1, -1)">-</button>
+            <span class="count-val" id="cnt1">1</span>
+            <button class="count-btn" onclick="change(1, 1)">+</button>
+        </div>
+        <button class="btn btn-base" onclick="send(1, 'Класичний')">Купити</button>
     </div>
 
     <div class="ticket-card">
-        <div class="card-header">
-            <h2 class="card-title">Класичний 🌸</h2>
-            <div class="price">300 ₴</div>
+        <div style="display:flex; justify-content: space-between; align-items:center;">
+            <h3>Виступаючий</h3><div class="price">250 ₴</div>
         </div>
-        <div class="desc">Базовий квиток для найкращих котиків.</div>
-        <button class="btn btn-base" onclick="buyTicket('Класичний (300 грн)')">Купити квиток</button>
-    </div>
-
-    <div class="ticket-card">
-        <div class="card-header">
-            <h2 class="card-title">Для виступаючих 🎭</h2>
-            <div class="price">250 ₴</div>
+        <p class="desc">Для тих, хто пройшов відбір.</p>
+        <div class="counter">
+            <button class="count-btn" onclick="change(2, -1)">-</button>
+            <span class="count-val" id="cnt2">1</span>
+            <button class="count-btn" onclick="change(2, 1)">+</button>
         </div>
-        <div class="desc">Для тих, хто пройшов відбір.</div>
-        <button class="btn btn-vip" onclick="buyTicket('Для виступаючих (250 грн)')">Я виступаю</button>
+        <button class="btn btn-vip" onclick="send(2, 'Для виступаючих')">Купити</button>
     </div>
 
     <script>
-        const tg = window.Telegram.WebApp;
-        tg.expand(); 
-
-        function buyTicket(type) {
-            tg.sendData(type);
+        const tg = window.Telegram.WebApp; tg.expand();
+        let counts = { 1: 1, 2: 1 };
+        function change(id, delta) {
+            counts[id] = Math.max(1, Math.min(10, counts[id] + delta));
+            document.getElementById('cnt' + id).innerText = counts[id];
+        }
+        function send(id, name) {
+            tg.sendData(JSON.stringify({ ticket: name, count: counts[id] }));
             tg.close();
         }
     </script>
-
 </body>
 </html>
