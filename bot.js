@@ -6,7 +6,7 @@ const path = require('path');
 const bot = new Telegraf('8770505563:AAEE8UeScHMw-4zJekTODyVuHUdtGcr0K9Q'); 
 
 // ТЕПЕРЬ ТУТ СПИСОК АДМИНОВ (Твой и Хироши)
-const ADMIN_IDS = ['789355423', 'ТУТ_ID_ХИРОШИ']; // Замени ТУТ_ID_ХИРОШИ на его реальные цифры
+const ADMIN_IDS = ['789355423', '821782817']; // Замени ТУТ_ID_ХИРОШИ на его реальные цифры
 
 const APP_URL = 'https://zhutler.github.io/nyako-tickets/app.html?v=4';
 const SCANNER_URL = 'https://zhutler.github.io/nyako-tickets/scanner.html?v=1';
