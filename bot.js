@@ -4,7 +4,7 @@ const fs = require('fs');
 const path = require('path');
 
 const bot = new Telegraf('8770505563:AAEE8UeScHMw-4zJekTODyVuHUdtGcr0K9Q'); 
-const ADMIN_IDS = ['789355423', '821782817', '5690029894']; // Не забудь айди Хироши
+const ADMIN_IDS = ['789355423', 'ТУТ_ID_ХИРОШИ']; // Не забудь айди Хироши
 const APP_URL = 'https://zhutler.github.io/nyako-tickets/app.html?v=5';
 const SCANNER_URL = 'https://zhutler.github.io/nyako-tickets/scanner.html?v=1';
 
@@ -47,14 +47,29 @@ bot.start((ctx) => {
 
 bot.on('message', async (ctx, next) => {
     if (ctx.message && ctx.message.web_app_data) {
+        const rawData = ctx.message.web_app_data.data;
+
+        // Спочатку перевіряємо, чи це дані зі сканера
+        if (rawData.startsWith('SCAN:')) {
+            const ticketId = rawData.replace('SCAN:', '');
+            const db = loadDB();
+            
+            if (!db[ticketId]) return ctx.reply('❌ Паль! Такого квитка не існує.');
+            if (db[ticketId].used) return ctx.reply('⚠️ Увага! Квиток вже використано.');
+            
+            db[ticketId].used = true;
+            saveDB(db);
+            return ctx.reply('✅ Прохід дозволено! Квиток погашено.');
+        }
+
+        // Якщо це не сканер, значить це JSON з покупкою квитків
         try {
-            const data = JSON.parse(ctx.message.web_app_data.data);
+            const data = JSON.parse(rawData);
             const userId = ctx.from.id;
             
             const price = data.ticket === 'Класичний' ? 300 : 250;
             const totalSum = data.count * price;
             
-            // Зберігаємо запит на жорсткий диск
             const reqDb = loadReqDB();
             reqDb[userId] = { ticketType: data.ticket, count: data.count, adminMsgs: [] };
             saveReqDB(reqDb);
@@ -70,7 +85,6 @@ bot.on('message', async (ctx, next) => {
 bot.on('photo', async (ctx) => {
     const userId = ctx.from.id;
     
-    // Читаємо з бази запитів
     const reqDb = loadReqDB();
     const req = reqDb[userId];
     
@@ -153,7 +167,7 @@ bot.action(/reject_(.+)/, async (ctx) => {
 });
 
 bot.launch();
-console.log('Бот Nyako-kon з синхронізацією адмінів та вічною пам\'яттю запущено!');
+console.log('Бот Nyako-kon: фікс сканера завантажено!');
 
 process.once('SIGINT', () => bot.stop('SIGINT'));
 process.once('SIGTERM', () => bot.stop('SIGTERM'));
