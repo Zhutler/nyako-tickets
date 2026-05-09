@@ -5,7 +5,7 @@ const path = require('path');
 
 // Бот берет токен из скрытых настроек Railway
 const bot = new Telegraf(process.env.BOT_TOKEN); 
-const ADMIN_IDS = ['789355423', '821782817', '678439277']; // Не забудь айди Хироши
+const ADMIN_IDS = ['789355423', '821782817', '678439277', '1672507362', '1089717768', '8595175426']; // Не забудь айди Хироши
 const APP_URL = 'https://zhutler.github.io/nyako-tickets/app.html?v=5';
 const SCANNER_URL = 'https://zhutler.github.io/nyako-tickets/scanner.html?v=1';
 
