@@ -2,15 +2,17 @@ const { Telegraf, Markup } = require('telegraf');
 const QRCode = require('qrcode');
 const fs = require('fs');
 const path = require('path');
+const { isValidTelegramId, addAdminId, removeAdminId } = require('./logic');
 
 // Бот берет токен из скрытых настроек Railway
-const bot = new Telegraf(process.env.BOT_TOKEN); 
-const ADMIN_IDS = ['789355423', '821782817', '678439277', '1672507362', '1089717768', '8595175426']; // Не забудь айди Хироши
+const bot = new Telegraf(process.env.BOT_TOKEN);
+const DEFAULT_ADMIN_IDS = ['789355423', '821782817', '678439277', '1672507362', '1089717768', '8595175426']; // Використовується лише для первинної міграції admins.json
 const APP_URL = 'https://zhutler.github.io/nyako-tickets/app.html?v=5';
 const SCANNER_URL = 'https://zhutler.github.io/nyako-tickets/scanner.html?v=1';
 
 const dbPath = '/data/tickets.json';
 const reqDbPath = '/data/requests.json';
+const adminsDbPath = '/data/admins.json';
 
 if (!fs.existsSync('/data')) {
     try { fs.mkdirSync('/data'); } catch (e) { console.log('Папка /data відсутня'); }
@@ -38,13 +40,28 @@ function saveReqDB(data) {
     fs.writeFileSync(currentPath, JSON.stringify(data, null, 2));
 }
 
+function loadAdminsDB() {
+    const currentPath = fs.existsSync(adminsDbPath) ? adminsDbPath : path.join(__dirname, 'admins.json');
+    if (!fs.existsSync(currentPath)) fs.writeFileSync(currentPath, JSON.stringify(DEFAULT_ADMIN_IDS));
+    return JSON.parse(fs.readFileSync(currentPath));
+}
+
+function saveAdminsDB(adminIds) {
+    const currentPath = fs.existsSync('/data') ? adminsDbPath : path.join(__dirname, 'admins.json');
+    fs.writeFileSync(currentPath, JSON.stringify(adminIds, null, 2));
+}
+
+function isAdmin(idStr) {
+    return loadAdminsDB().includes(idStr);
+}
+
 bot.start(async (ctx) => {
     // Вбиваємо синю кнопку зліва знизу
     try { await ctx.setChatMenuButton({ type: 'default' }); } catch(e){}
 
-    const isAdmin = ADMIN_IDS.includes(ctx.from.id.toString());
+    const userIsAdmin = isAdmin(ctx.from.id.toString());
     const buttons = [[Markup.button.webApp('Купити квиток 🎟', APP_URL)]];
-    if (isAdmin) buttons.push([Markup.button.webApp('📷 Сканер квитків (Адмін)', SCANNER_URL)]);
+    if (userIsAdmin) buttons.push([Markup.button.webApp('📷 Сканер квитків (Адмін)', SCANNER_URL)]);
     ctx.reply('Вітаємо на Nyako-kon! 🎫', Markup.keyboard(buttons).resize());
 });
 
@@ -125,7 +142,7 @@ bot.on('photo', async (ctx) => {
 });
 
 bot.action(/confirm_(.+)/, async (ctx) => {
-    if (!ADMIN_IDS.includes(ctx.from.id.toString())) return ctx.answerCbQuery('Тільки для оргів!');
+    if (!isAdmin(ctx.from.id.toString())) return ctx.answerCbQuery('Тільки для оргів!');
 
     const txId = ctx.match[1];
     const reqDb = loadReqDB();
@@ -165,7 +182,7 @@ bot.action(/confirm_(.+)/, async (ctx) => {
 });
 
 bot.action(/reject_(.+)/, async (ctx) => {
-    if (!ADMIN_IDS.includes(ctx.from.id.toString())) return;
+    if (!isAdmin(ctx.from.id.toString())) return;
 
     const txId = ctx.match[1];
     const reqDb = loadReqDB();
@@ -180,6 +197,41 @@ bot.action(/reject_(.+)/, async (ctx) => {
         delete reqDb[txId];
         saveReqDB(reqDb);
     }
+});
+
+bot.command('myid', (ctx) => {
+    ctx.reply(`Твій ID: ${ctx.from.id}`);
+});
+
+bot.command('addadmin', (ctx) => {
+    if (!isAdmin(ctx.from.id.toString())) return ctx.reply('Тільки для оргів!');
+
+    const targetId = ctx.message.text.split(' ')[1];
+    if (!targetId || !isValidTelegramId(targetId)) return ctx.reply('Використання: /addadmin <telegram_id>');
+
+    const admins = loadAdminsDB();
+    const result = addAdminId(admins, targetId);
+    if (!result.added) return ctx.reply('Цей користувач вже адмін.');
+
+    saveAdminsDB(result.adminIds);
+    ctx.reply(`✅ Додано адміна ${targetId}. Всього адмінів: ${result.adminIds.length}`);
+});
+
+bot.command('removeadmin', (ctx) => {
+    if (!isAdmin(ctx.from.id.toString())) return ctx.reply('Тільки для оргів!');
+
+    const targetId = ctx.message.text.split(' ')[1];
+    if (!targetId || !isValidTelegramId(targetId)) return ctx.reply('Використання: /removeadmin <telegram_id>');
+
+    const admins = loadAdminsDB();
+    const result = removeAdminId(admins, targetId);
+    if (!result.removed) {
+        if (result.reason === 'last_admin') return ctx.reply('❌ Не можна видалити останнього адміна.');
+        return ctx.reply('Цей ID не є адміном.');
+    }
+
+    saveAdminsDB(result.adminIds);
+    ctx.reply(`✅ Видалено адміна ${targetId}. Всього адмінів: ${result.adminIds.length}`);
 });
 
 bot.launch();
