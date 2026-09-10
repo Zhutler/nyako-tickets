@@ -1,5 +1,5 @@
 const assert = require('assert/strict');
-const { computeStats, formatStatsMessage, priceFor, TICKET_TYPES, isValidTelegramId, addAdminId, removeAdminId } = require('../logic');
+const { computeStats, formatStatsMessage, priceFor, TICKET_TYPES, isValidTelegramId, addAdminId, removeAdminId, removeScannerId } = require('../logic');
 
 function test(name, fn) {
     try {
@@ -128,4 +128,19 @@ test('priceFor: falls back to 250 for unknown ticket types (historical data)', (
 
 test('TICKET_TYPES: contains exactly the two known ticket types', () => {
     assert.deepEqual(TICKET_TYPES, { 'Класичний': 300, 'Для виступаючих': 250 });
+});
+
+test('removeScannerId: removes an existing id', () => {
+    const result = removeScannerId(['111', '222'], '111');
+    assert.deepEqual(result, { scannerIds: ['222'], removed: true, reason: null });
+});
+
+test('removeScannerId: removes the last remaining scanner (no last-entry protection)', () => {
+    const result = removeScannerId(['111'], '111');
+    assert.deepEqual(result, { scannerIds: [], removed: true, reason: null });
+});
+
+test('removeScannerId: reports not_found for unknown id', () => {
+    const result = removeScannerId(['111', '222'], '999');
+    assert.deepEqual(result, { scannerIds: ['111', '222'], removed: false, reason: 'not_found' });
 });

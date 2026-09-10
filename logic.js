@@ -51,4 +51,9 @@ function removeAdminId(adminIds, idStr) {
     return { adminIds: adminIds.filter(id => id !== idStr), removed: true, reason: null };
 }
 
-module.exports = { computeStats, formatStatsMessage, priceFor, TICKET_TYPES, isValidTelegramId, addAdminId, removeAdminId };
+function removeScannerId(scannerIds, idStr) {
+    if (!scannerIds.includes(idStr)) return { scannerIds, removed: false, reason: 'not_found' };
+    return { scannerIds: scannerIds.filter(id => id !== idStr), removed: true, reason: null };
+}
+
+module.exports = { computeStats, formatStatsMessage, priceFor, TICKET_TYPES, isValidTelegramId, addAdminId, removeAdminId, removeScannerId };
