@@ -95,10 +95,14 @@ bot.start(async (ctx) => {
     // Вбиваємо синю кнопку зліва знизу
     try { await ctx.setChatMenuButton({ type: 'default' }); } catch(e){}
 
-    const userIsAdmin = isAdmin(ctx.from.id.toString());
+    const userId = ctx.from.id.toString();
+    const userIsAdmin = isAdmin(userId);
+    const userIsScanner = isScanner(userId);
     const buttons = [[Markup.button.webApp('Купити квиток 🎟', APP_URL)]];
-    if (userIsAdmin) {
+    if (userIsAdmin || userIsScanner) {
         buttons.push([Markup.button.webApp('📷 Сканер квитків (Адмін)', SCANNER_URL)]);
+    }
+    if (userIsAdmin) {
         buttons.push(['📊 Статистика']);
         buttons.push(['➕ Додати адміна', '➖ Видалити адміна']);
         buttons.push(['🟢 Увімкнути виступаючих', '🔴 Вимкнути виступаючих']);
