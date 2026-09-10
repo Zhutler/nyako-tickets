@@ -122,7 +122,7 @@ bot.on('photo', async (ctx) => {
     // Видаляємо чернетку, щоб другий чек не кинули на ті ж дані
     delete reqDb[`draft_${userId}`];
 
-    for (const adminId of ADMIN_IDS) {
+    for (const adminId of loadAdminsDB()) {
         try {
             const msg = await ctx.telegram.sendPhoto(adminId, fileId, {
                 caption: `Чек від @${ctx.message.from.username || userId}\nКвитки: ${draft.ticketType} (${draft.count} шт.)`,
