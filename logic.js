@@ -1,5 +1,7 @@
+const TICKET_TYPES = { 'Класичний': 300, 'Для виступаючих': 250 };
+
 function priceFor(ticketType) {
-    return ticketType === 'Класичний' ? 300 : 250;
+    return TICKET_TYPES[ticketType] || 250;
 }
 
 function computeStats(ticketsDb, requestsDb) {
@@ -49,4 +51,4 @@ function removeAdminId(adminIds, idStr) {
     return { adminIds: adminIds.filter(id => id !== idStr), removed: true, reason: null };
 }
 
-module.exports = { computeStats, formatStatsMessage, priceFor, isValidTelegramId, addAdminId, removeAdminId };
+module.exports = { computeStats, formatStatsMessage, priceFor, TICKET_TYPES, isValidTelegramId, addAdminId, removeAdminId };

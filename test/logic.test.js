@@ -1,5 +1,5 @@
 const assert = require('assert/strict');
-const { computeStats, formatStatsMessage, isValidTelegramId, addAdminId, removeAdminId } = require('../logic');
+const { computeStats, formatStatsMessage, priceFor, TICKET_TYPES, isValidTelegramId, addAdminId, removeAdminId } = require('../logic');
 
 function test(name, fn) {
     try {
@@ -112,4 +112,20 @@ test('removeAdminId: refuses to remove the last admin', () => {
 test('removeAdminId: reports not_found for unknown id', () => {
     const result = removeAdminId(['111', '222'], '999');
     assert.deepEqual(result, { adminIds: ['111', '222'], removed: false, reason: 'not_found' });
+});
+
+test('priceFor: prices Класичний at 300', () => {
+    assert.equal(priceFor('Класичний'), 300);
+});
+
+test('priceFor: prices Для виступаючих at 250', () => {
+    assert.equal(priceFor('Для виступаючих'), 250);
+});
+
+test('priceFor: falls back to 250 for unknown ticket types (historical data)', () => {
+    assert.equal(priceFor('bogus'), 250);
+});
+
+test('TICKET_TYPES: contains exactly the two known ticket types', () => {
+    assert.deepEqual(TICKET_TYPES, { 'Класичний': 300, 'Для виступаючих': 250 });
 });

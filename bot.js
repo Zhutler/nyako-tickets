@@ -2,7 +2,7 @@ const { Telegraf, Markup } = require('telegraf');
 const QRCode = require('qrcode');
 const fs = require('fs');
 const path = require('path');
-const { computeStats, formatStatsMessage, isValidTelegramId, addAdminId, removeAdminId } = require('./logic');
+const { computeStats, formatStatsMessage, priceFor, TICKET_TYPES, isValidTelegramId, addAdminId, removeAdminId } = require('./logic');
 
 // Бот берет токен из скрытых настроек Railway
 const bot = new Telegraf(process.env.BOT_TOKEN);
@@ -97,14 +97,18 @@ bot.on('message', async (ctx, next) => {
             const data = JSON.parse(rawData);
             const userId = ctx.from.id;
 
+            if (!TICKET_TYPES[data.ticket]) {
+                return ctx.reply('Помилка даних. Спробуй ще раз.');
+            }
+
             if (data.ticket === 'Для виступаючих') {
                 const config = loadConfigDB();
-                if (!config.performerTicketsOpen) {
+                if (config.performerTicketsOpen === false) {
                     return ctx.reply('Продаж квитків для виступаючих ще не відкрито.');
                 }
             }
 
-            const price = data.ticket === 'Класичний' ? 300 : 250;
+            const price = priceFor(data.ticket);
             const totalSum = data.count * price;
             
             // ЗБЕРІГАЄМО ЯК ЧЕРНЕТКУ
