@@ -364,6 +364,21 @@ bot.command('removescanner', (ctx) => {
     ctx.reply(`✅ Видалено сканера ${targetId}. Всього сканерів: ${result.scannerIds.length}`);
 });
 
+bot.command('reset_tickets', (ctx) => {
+    if (!isAdmin(ctx.from.id.toString())) return ctx.reply('Тільки для оргів!');
+
+    const ticketsDb = loadDB();
+    const count = Object.keys(ticketsDb).length;
+    const confirmed = ctx.message.text.split(' ')[1] === 'confirm';
+
+    if (!confirmed) {
+        return ctx.reply(`⚠️ Це видалить ВСІ ${count} квитків без можливості відновлення.\n\nЩоб підтвердити, напиши: /reset_tickets confirm`);
+    }
+
+    saveDB({});
+    ctx.reply(`✅ Список квитків очищено. Видалено: ${count}.`);
+});
+
 bot.catch((err, ctx) => {
     console.log('Помилка обробки оновлення:', err);
 });
