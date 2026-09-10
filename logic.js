@@ -34,4 +34,19 @@ function formatStatsMessage(stats, performerOpen) {
         `Очікують підтвердження: ${stats.pendingCount} чека`;
 }
 
-module.exports = { computeStats, formatStatsMessage, priceFor };
+function isValidTelegramId(idStr) {
+    return typeof idStr === 'string' && /^\d+$/.test(idStr);
+}
+
+function addAdminId(adminIds, idStr) {
+    if (adminIds.includes(idStr)) return { adminIds, added: false };
+    return { adminIds: [...adminIds, idStr], added: true };
+}
+
+function removeAdminId(adminIds, idStr) {
+    if (!adminIds.includes(idStr)) return { adminIds, removed: false, reason: 'not_found' };
+    if (adminIds.length === 1) return { adminIds, removed: false, reason: 'last_admin' };
+    return { adminIds: adminIds.filter(id => id !== idStr), removed: true, reason: null };
+}
+
+module.exports = { computeStats, formatStatsMessage, priceFor, isValidTelegramId, addAdminId, removeAdminId };

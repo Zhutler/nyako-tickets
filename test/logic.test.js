@@ -1,5 +1,5 @@
 const assert = require('assert/strict');
-const { computeStats, formatStatsMessage } = require('../logic');
+const { computeStats, formatStatsMessage, isValidTelegramId, addAdminId, removeAdminId } = require('../logic');
 
 function test(name, fn) {
     try {
@@ -77,4 +77,39 @@ test('formatStatsMessage: shows open status for performer tickets', () => {
     };
     const msg = formatStatsMessage(stats, true);
     assert.ok(msg.includes('🟢 відкрито'));
+});
+
+test('isValidTelegramId: accepts digit-only strings', () => {
+    assert.equal(isValidTelegramId('123456789'), true);
+});
+
+test('isValidTelegramId: rejects non-numeric or empty strings', () => {
+    assert.equal(isValidTelegramId('abc'), false);
+    assert.equal(isValidTelegramId(''), false);
+    assert.equal(isValidTelegramId('123abc'), false);
+});
+
+test('addAdminId: adds a new id', () => {
+    const result = addAdminId(['111', '222'], '333');
+    assert.deepEqual(result, { adminIds: ['111', '222', '333'], added: true });
+});
+
+test('addAdminId: no-ops on duplicate', () => {
+    const result = addAdminId(['111', '222'], '111');
+    assert.deepEqual(result, { adminIds: ['111', '222'], added: false });
+});
+
+test('removeAdminId: removes an existing id', () => {
+    const result = removeAdminId(['111', '222'], '111');
+    assert.deepEqual(result, { adminIds: ['222'], removed: true, reason: null });
+});
+
+test('removeAdminId: refuses to remove the last admin', () => {
+    const result = removeAdminId(['111'], '111');
+    assert.deepEqual(result, { adminIds: ['111'], removed: false, reason: 'last_admin' });
+});
+
+test('removeAdminId: reports not_found for unknown id', () => {
+    const result = removeAdminId(['111', '222'], '999');
+    assert.deepEqual(result, { adminIds: ['111', '222'], removed: false, reason: 'not_found' });
 });
