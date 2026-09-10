@@ -2,7 +2,7 @@ const { Telegraf, Markup } = require('telegraf');
 const QRCode = require('qrcode');
 const fs = require('fs');
 const path = require('path');
-const { computeStats, formatStatsMessage, priceFor, TICKET_TYPES, isValidTelegramId, addAdminId, removeAdminId } = require('./logic');
+const { computeStats, formatStatsMessage, priceFor, TICKET_TYPES, isValidTelegramId, addAdminId, removeAdminId, removeScannerId } = require('./logic');
 
 // Бот берет токен из скрытых настроек Railway
 const bot = new Telegraf(process.env.BOT_TOKEN);
@@ -14,6 +14,7 @@ const dbPath = '/data/tickets.json';
 const reqDbPath = '/data/requests.json';
 const adminsDbPath = '/data/admins.json';
 const configDbPath = '/data/config.json';
+const scannersDbPath = '/data/scanners.json';
 
 if (!fs.existsSync('/data')) {
     try { fs.mkdirSync('/data'); } catch (e) { console.log('Папка /data відсутня'); }
@@ -58,6 +59,25 @@ function saveAdminsDB(adminIds) {
 
 function isAdmin(idStr) {
     return loadAdminsDB().includes(idStr);
+}
+
+function loadScannersDB() {
+    const currentPath = fs.existsSync(scannersDbPath) ? scannersDbPath : path.join(__dirname, 'scanners.json');
+    if (!fs.existsSync(currentPath)) fs.writeFileSync(currentPath, JSON.stringify([]));
+    try {
+        const parsed = JSON.parse(fs.readFileSync(currentPath));
+        if (Array.isArray(parsed)) return parsed;
+    } catch (e) { console.log('scanners.json пошкоджено — використовую порожній список'); }
+    return [];
+}
+
+function saveScannersDB(scannerIds) {
+    const currentPath = fs.existsSync('/data') ? scannersDbPath : path.join(__dirname, 'scanners.json');
+    fs.writeFileSync(currentPath, JSON.stringify(scannerIds, null, 2));
+}
+
+function isScanner(idStr) {
+    return loadScannersDB().includes(idStr);
 }
 
 function loadConfigDB() {
@@ -310,6 +330,34 @@ bot.hears('➖ Видалити адміна', (ctx) => {
     if (!isAdmin(ctx.from.id.toString())) return ctx.reply('Тільки для оргів!');
     const admins = loadAdminsDB();
     ctx.reply(`Щоб видалити адміна, напиши команду:\n/removeadmin <telegram_id>\n\nПоточні адміни:\n${admins.join('\n')}`);
+});
+
+bot.command('addscanner', (ctx) => {
+    if (!isAdmin(ctx.from.id.toString())) return ctx.reply('Тільки для оргів!');
+
+    const targetId = ctx.message.text.split(' ')[1];
+    if (!targetId || !isValidTelegramId(targetId)) return ctx.reply('Використання: /addscanner <telegram_id>');
+
+    const scanners = loadScannersDB();
+    const { adminIds: newScanners, added } = addAdminId(scanners, targetId);
+    if (!added) return ctx.reply('Цей користувач вже сканер.');
+
+    saveScannersDB(newScanners);
+    ctx.reply(`✅ Додано сканера ${targetId}. Всього сканерів: ${newScanners.length}`);
+});
+
+bot.command('removescanner', (ctx) => {
+    if (!isAdmin(ctx.from.id.toString())) return ctx.reply('Тільки для оргів!');
+
+    const targetId = ctx.message.text.split(' ')[1];
+    if (!targetId || !isValidTelegramId(targetId)) return ctx.reply('Використання: /removescanner <telegram_id>');
+
+    const scanners = loadScannersDB();
+    const result = removeScannerId(scanners, targetId);
+    if (!result.removed) return ctx.reply('Цей ID не є сканером.');
+
+    saveScannersDB(result.scannerIds);
+    ctx.reply(`✅ Видалено сканера ${targetId}. Всього сканерів: ${result.scannerIds.length}`);
 });
 
 bot.catch((err, ctx) => {
