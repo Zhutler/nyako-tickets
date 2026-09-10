@@ -2,15 +2,19 @@ const { Telegraf, Markup } = require('telegraf');
 const QRCode = require('qrcode');
 const fs = require('fs');
 const path = require('path');
+const { computeStats, formatStatsMessage, priceFor, TICKET_TYPES, isValidTelegramId, addAdminId, removeAdminId, removeScannerId } = require('./logic');
 
 // Бот берет токен из скрытых настроек Railway
-const bot = new Telegraf(process.env.BOT_TOKEN); 
-const ADMIN_IDS = ['789355423', '821782817', '678439277', '1672507362', '1089717768', '8595175426']; // Не забудь айди Хироши
+const bot = new Telegraf(process.env.BOT_TOKEN);
+const DEFAULT_ADMIN_IDS = ['789355423', '821782817', '678439277', '1672507362', '1089717768', '8595175426']; // Використовується лише для первинної міграції admins.json
 const APP_URL = 'https://zhutler.github.io/nyako-tickets/app.html?v=5';
 const SCANNER_URL = 'https://zhutler.github.io/nyako-tickets/scanner.html?v=1';
 
 const dbPath = '/data/tickets.json';
 const reqDbPath = '/data/requests.json';
+const adminsDbPath = '/data/admins.json';
+const configDbPath = '/data/config.json';
+const scannersDbPath = '/data/scanners.json';
 
 if (!fs.existsSync('/data')) {
     try { fs.mkdirSync('/data'); } catch (e) { console.log('Папка /data відсутня'); }
@@ -38,13 +42,71 @@ function saveReqDB(data) {
     fs.writeFileSync(currentPath, JSON.stringify(data, null, 2));
 }
 
+function loadAdminsDB() {
+    const currentPath = fs.existsSync(adminsDbPath) ? adminsDbPath : path.join(__dirname, 'admins.json');
+    if (!fs.existsSync(currentPath)) fs.writeFileSync(currentPath, JSON.stringify(DEFAULT_ADMIN_IDS));
+    try {
+        const parsed = JSON.parse(fs.readFileSync(currentPath));
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+    } catch (e) { console.log('admins.json пошкоджено — використовую DEFAULT_ADMIN_IDS'); }
+    return DEFAULT_ADMIN_IDS;
+}
+
+function saveAdminsDB(adminIds) {
+    const currentPath = fs.existsSync('/data') ? adminsDbPath : path.join(__dirname, 'admins.json');
+    fs.writeFileSync(currentPath, JSON.stringify(adminIds, null, 2));
+}
+
+function isAdmin(idStr) {
+    return loadAdminsDB().includes(idStr);
+}
+
+function loadScannersDB() {
+    const currentPath = fs.existsSync(scannersDbPath) ? scannersDbPath : path.join(__dirname, 'scanners.json');
+    if (!fs.existsSync(currentPath)) fs.writeFileSync(currentPath, JSON.stringify([]));
+    try {
+        const parsed = JSON.parse(fs.readFileSync(currentPath));
+        if (Array.isArray(parsed)) return parsed;
+    } catch (e) { console.log('scanners.json пошкоджено — використовую порожній список'); }
+    return [];
+}
+
+function saveScannersDB(scannerIds) {
+    const currentPath = fs.existsSync('/data') ? scannersDbPath : path.join(__dirname, 'scanners.json');
+    fs.writeFileSync(currentPath, JSON.stringify(scannerIds, null, 2));
+}
+
+function isScanner(idStr) {
+    return loadScannersDB().includes(idStr);
+}
+
+function loadConfigDB() {
+    const currentPath = fs.existsSync(configDbPath) ? configDbPath : path.join(__dirname, 'config.json');
+    if (!fs.existsSync(currentPath)) fs.writeFileSync(currentPath, JSON.stringify({ performerTicketsOpen: true }));
+    return JSON.parse(fs.readFileSync(currentPath));
+}
+
+function saveConfigDB(config) {
+    const currentPath = fs.existsSync('/data') ? configDbPath : path.join(__dirname, 'config.json');
+    fs.writeFileSync(currentPath, JSON.stringify(config, null, 2));
+}
+
 bot.start(async (ctx) => {
     // Вбиваємо синю кнопку зліва знизу
     try { await ctx.setChatMenuButton({ type: 'default' }); } catch(e){}
 
-    const isAdmin = ADMIN_IDS.includes(ctx.from.id.toString());
+    const userId = ctx.from.id.toString();
+    const userIsAdmin = isAdmin(userId);
+    const userIsScanner = isScanner(userId);
     const buttons = [[Markup.button.webApp('Купити квиток 🎟', APP_URL)]];
-    if (isAdmin) buttons.push([Markup.button.webApp('📷 Сканер квитків (Адмін)', SCANNER_URL)]);
+    if (userIsAdmin || userIsScanner) {
+        buttons.push([Markup.button.webApp('📷 Сканер квитків (Адмін)', SCANNER_URL)]);
+    }
+    if (userIsAdmin) {
+        buttons.push(['📊 Статистика']);
+        buttons.push(['➕ Додати адміна', '➖ Видалити адміна']);
+        buttons.push(['🟢 Увімкнути виступаючих', '🔴 Вимкнути виступаючих']);
+    }
     ctx.reply('Вітаємо на Nyako-kon! 🎫', Markup.keyboard(buttons).resize());
 });
 
@@ -67,8 +129,19 @@ bot.on('message', async (ctx, next) => {
         try {
             const data = JSON.parse(rawData);
             const userId = ctx.from.id;
-            
-            const price = data.ticket === 'Класичний' ? 300 : 250;
+
+            if (!TICKET_TYPES[data.ticket]) {
+                return ctx.reply('Помилка даних. Спробуй ще раз.');
+            }
+
+            if (data.ticket === 'Для виступаючих') {
+                const config = loadConfigDB();
+                if (config.performerTicketsOpen === false) {
+                    return ctx.reply('Продаж квитків для виступаючих ще не відкрито.');
+                }
+            }
+
+            const price = priceFor(data.ticket);
             const totalSum = data.count * price;
             
             // ЗБЕРІГАЄМО ЯК ЧЕРНЕТКУ
@@ -105,7 +178,7 @@ bot.on('photo', async (ctx) => {
     // Видаляємо чернетку, щоб другий чек не кинули на ті ж дані
     delete reqDb[`draft_${userId}`];
 
-    for (const adminId of ADMIN_IDS) {
+    for (const adminId of loadAdminsDB()) {
         try {
             const msg = await ctx.telegram.sendPhoto(adminId, fileId, {
                 caption: `Чек від @${ctx.message.from.username || userId}\nКвитки: ${draft.ticketType} (${draft.count} шт.)`,
@@ -125,7 +198,7 @@ bot.on('photo', async (ctx) => {
 });
 
 bot.action(/confirm_(.+)/, async (ctx) => {
-    if (!ADMIN_IDS.includes(ctx.from.id.toString())) return ctx.answerCbQuery('Тільки для оргів!');
+    if (!isAdmin(ctx.from.id.toString())) return ctx.answerCbQuery('Тільки для оргів!');
 
     const txId = ctx.match[1];
     const reqDb = loadReqDB();
@@ -165,7 +238,7 @@ bot.action(/confirm_(.+)/, async (ctx) => {
 });
 
 bot.action(/reject_(.+)/, async (ctx) => {
-    if (!ADMIN_IDS.includes(ctx.from.id.toString())) return;
+    if (!isAdmin(ctx.from.id.toString())) return;
 
     const txId = ctx.match[1];
     const reqDb = loadReqDB();
@@ -180,6 +253,119 @@ bot.action(/reject_(.+)/, async (ctx) => {
         delete reqDb[txId];
         saveReqDB(reqDb);
     }
+});
+
+bot.command('myid', (ctx) => {
+    ctx.reply(`Твій ID: ${ctx.from.id}`);
+});
+
+bot.command('addadmin', (ctx) => {
+    if (!isAdmin(ctx.from.id.toString())) return ctx.reply('Тільки для оргів!');
+
+    const targetId = ctx.message.text.split(' ')[1];
+    if (!targetId || !isValidTelegramId(targetId)) return ctx.reply('Використання: /addadmin <telegram_id>');
+
+    const admins = loadAdminsDB();
+    const result = addAdminId(admins, targetId);
+    if (!result.added) return ctx.reply('Цей користувач вже адмін.');
+
+    saveAdminsDB(result.adminIds);
+    ctx.reply(`✅ Додано адміна ${targetId}. Всього адмінів: ${result.adminIds.length}`);
+});
+
+bot.command('removeadmin', (ctx) => {
+    if (!isAdmin(ctx.from.id.toString())) return ctx.reply('Тільки для оргів!');
+
+    const targetId = ctx.message.text.split(' ')[1];
+    if (!targetId || !isValidTelegramId(targetId)) return ctx.reply('Використання: /removeadmin <telegram_id>');
+
+    const admins = loadAdminsDB();
+    const result = removeAdminId(admins, targetId);
+    if (!result.removed) {
+        if (result.reason === 'last_admin') return ctx.reply('❌ Не можна видалити останнього адміна.');
+        return ctx.reply('Цей ID не є адміном.');
+    }
+
+    saveAdminsDB(result.adminIds);
+    ctx.reply(`✅ Видалено адміна ${targetId}. Всього адмінів: ${result.adminIds.length}`);
+});
+
+function openPerformerSales(ctx) {
+    if (!isAdmin(ctx.from.id.toString())) return ctx.reply('Тільки для оргів!');
+    const config = loadConfigDB();
+    config.performerTicketsOpen = true;
+    saveConfigDB(config);
+    ctx.reply('🟢 Продаж квитків для виступаючих відкрито.');
+}
+
+function closePerformerSales(ctx) {
+    if (!isAdmin(ctx.from.id.toString())) return ctx.reply('Тільки для оргів!');
+    const config = loadConfigDB();
+    config.performerTicketsOpen = false;
+    saveConfigDB(config);
+    ctx.reply('🔴 Продаж квитків для виступаючих закрито.');
+}
+
+function sendStats(ctx) {
+    if (!isAdmin(ctx.from.id.toString())) return ctx.reply('Тільки для оргів!');
+
+    const ticketsDb = loadDB();
+    const requestsDb = loadReqDB();
+    const config = loadConfigDB();
+    const stats = computeStats(ticketsDb, requestsDb);
+
+    ctx.reply(formatStatsMessage(stats, config.performerTicketsOpen));
+}
+
+bot.command('performer_open', openPerformerSales);
+bot.command('performer_close', closePerformerSales);
+bot.command('stats', sendStats);
+
+bot.hears('📊 Статистика', sendStats);
+bot.hears('🟢 Увімкнути виступаючих', openPerformerSales);
+bot.hears('🔴 Вимкнути виступаючих', closePerformerSales);
+
+bot.hears('➕ Додати адміна', (ctx) => {
+    if (!isAdmin(ctx.from.id.toString())) return ctx.reply('Тільки для оргів!');
+    ctx.reply('Щоб додати адміна, напиши команду:\n/addadmin <telegram_id>\n\nID можна дізнатись командою /myid — нехай новий адмін напише її сам і надішле тобі результат.');
+});
+
+bot.hears('➖ Видалити адміна', (ctx) => {
+    if (!isAdmin(ctx.from.id.toString())) return ctx.reply('Тільки для оргів!');
+    const admins = loadAdminsDB();
+    ctx.reply(`Щоб видалити адміна, напиши команду:\n/removeadmin <telegram_id>\n\nПоточні адміни:\n${admins.join('\n')}`);
+});
+
+bot.command('addscanner', (ctx) => {
+    if (!isAdmin(ctx.from.id.toString())) return ctx.reply('Тільки для оргів!');
+
+    const targetId = ctx.message.text.split(' ')[1];
+    if (!targetId || !isValidTelegramId(targetId)) return ctx.reply('Використання: /addscanner <telegram_id>');
+
+    const scanners = loadScannersDB();
+    const { adminIds: newScanners, added } = addAdminId(scanners, targetId);
+    if (!added) return ctx.reply('Цей користувач вже сканер.');
+
+    saveScannersDB(newScanners);
+    ctx.reply(`✅ Додано сканера ${targetId}. Всього сканерів: ${newScanners.length}`);
+});
+
+bot.command('removescanner', (ctx) => {
+    if (!isAdmin(ctx.from.id.toString())) return ctx.reply('Тільки для оргів!');
+
+    const targetId = ctx.message.text.split(' ')[1];
+    if (!targetId || !isValidTelegramId(targetId)) return ctx.reply('Використання: /removescanner <telegram_id>');
+
+    const scanners = loadScannersDB();
+    const result = removeScannerId(scanners, targetId);
+    if (!result.removed) return ctx.reply('Цей ID не є сканером.');
+
+    saveScannersDB(result.scannerIds);
+    ctx.reply(`✅ Видалено сканера ${targetId}. Всього сканерів: ${result.scannerIds.length}`);
+});
+
+bot.catch((err, ctx) => {
+    console.log('Помилка обробки оновлення:', err);
 });
 
 bot.launch();
