@@ -77,7 +77,12 @@ bot.start(async (ctx) => {
 
     const userIsAdmin = isAdmin(ctx.from.id.toString());
     const buttons = [[Markup.button.webApp('Купити квиток 🎟', APP_URL)]];
-    if (userIsAdmin) buttons.push([Markup.button.webApp('📷 Сканер квитків (Адмін)', SCANNER_URL)]);
+    if (userIsAdmin) {
+        buttons.push([Markup.button.webApp('📷 Сканер квитків (Адмін)', SCANNER_URL)]);
+        buttons.push(['📊 Статистика']);
+        buttons.push(['➕ Додати адміна', '➖ Видалити адміна']);
+        buttons.push(['🟢 Увімкнути виступаючих', '🔴 Вимкнути виступаючих']);
+    }
     ctx.reply('Вітаємо на Nyako-kon! 🎫', Markup.keyboard(buttons).resize());
 });
 
@@ -291,6 +296,21 @@ function sendStats(ctx) {
 bot.command('performer_open', openPerformerSales);
 bot.command('performer_close', closePerformerSales);
 bot.command('stats', sendStats);
+
+bot.hears('📊 Статистика', sendStats);
+bot.hears('🟢 Увімкнути виступаючих', openPerformerSales);
+bot.hears('🔴 Вимкнути виступаючих', closePerformerSales);
+
+bot.hears('➕ Додати адміна', (ctx) => {
+    if (!isAdmin(ctx.from.id.toString())) return ctx.reply('Тільки для оргів!');
+    ctx.reply('Щоб додати адміна, напиши команду:\n/addadmin <telegram_id>\n\nID можна дізнатись командою /myid — нехай новий адмін напише її сам і надішле тобі результат.');
+});
+
+bot.hears('➖ Видалити адміна', (ctx) => {
+    if (!isAdmin(ctx.from.id.toString())) return ctx.reply('Тільки для оргів!');
+    const admins = loadAdminsDB();
+    ctx.reply(`Щоб видалити адміна, напиши команду:\n/removeadmin <telegram_id>\n\nПоточні адміни:\n${admins.join('\n')}`);
+});
 
 bot.catch((err, ctx) => {
     console.log('Помилка обробки оновлення:', err);
