@@ -13,6 +13,7 @@ const SCANNER_URL = 'https://zhutler.github.io/nyako-tickets/scanner.html?v=1';
 const dbPath = '/data/tickets.json';
 const reqDbPath = '/data/requests.json';
 const adminsDbPath = '/data/admins.json';
+const configDbPath = '/data/config.json';
 
 if (!fs.existsSync('/data')) {
     try { fs.mkdirSync('/data'); } catch (e) { console.log('Папка /data відсутня'); }
@@ -55,6 +56,17 @@ function isAdmin(idStr) {
     return loadAdminsDB().includes(idStr);
 }
 
+function loadConfigDB() {
+    const currentPath = fs.existsSync(configDbPath) ? configDbPath : path.join(__dirname, 'config.json');
+    if (!fs.existsSync(currentPath)) fs.writeFileSync(currentPath, JSON.stringify({ performerTicketsOpen: true }));
+    return JSON.parse(fs.readFileSync(currentPath));
+}
+
+function saveConfigDB(config) {
+    const currentPath = fs.existsSync('/data') ? configDbPath : path.join(__dirname, 'config.json');
+    fs.writeFileSync(currentPath, JSON.stringify(config, null, 2));
+}
+
 bot.start(async (ctx) => {
     // Вбиваємо синю кнопку зліва знизу
     try { await ctx.setChatMenuButton({ type: 'default' }); } catch(e){}
@@ -84,7 +96,14 @@ bot.on('message', async (ctx, next) => {
         try {
             const data = JSON.parse(rawData);
             const userId = ctx.from.id;
-            
+
+            if (data.ticket === 'Для виступаючих') {
+                const config = loadConfigDB();
+                if (!config.performerTicketsOpen) {
+                    return ctx.reply('Продаж квитків для виступаючих ще не відкрито.');
+                }
+            }
+
             const price = data.ticket === 'Класичний' ? 300 : 250;
             const totalSum = data.count * price;
             
@@ -232,6 +251,22 @@ bot.command('removeadmin', (ctx) => {
 
     saveAdminsDB(result.adminIds);
     ctx.reply(`✅ Видалено адміна ${targetId}. Всього адмінів: ${result.adminIds.length}`);
+});
+
+bot.command('performer_open', (ctx) => {
+    if (!isAdmin(ctx.from.id.toString())) return ctx.reply('Тільки для оргів!');
+    const config = loadConfigDB();
+    config.performerTicketsOpen = true;
+    saveConfigDB(config);
+    ctx.reply('🟢 Продаж квитків для виступаючих відкрито.');
+});
+
+bot.command('performer_close', (ctx) => {
+    if (!isAdmin(ctx.from.id.toString())) return ctx.reply('Тільки для оргів!');
+    const config = loadConfigDB();
+    config.performerTicketsOpen = false;
+    saveConfigDB(config);
+    ctx.reply('🔴 Продаж квитків для виступаючих закрито.');
 });
 
 bot.launch();
