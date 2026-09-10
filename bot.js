@@ -261,23 +261,23 @@ bot.command('removeadmin', (ctx) => {
     ctx.reply(`✅ Видалено адміна ${targetId}. Всього адмінів: ${result.adminIds.length}`);
 });
 
-bot.command('performer_open', (ctx) => {
+function openPerformerSales(ctx) {
     if (!isAdmin(ctx.from.id.toString())) return ctx.reply('Тільки для оргів!');
     const config = loadConfigDB();
     config.performerTicketsOpen = true;
     saveConfigDB(config);
     ctx.reply('🟢 Продаж квитків для виступаючих відкрито.');
-});
+}
 
-bot.command('performer_close', (ctx) => {
+function closePerformerSales(ctx) {
     if (!isAdmin(ctx.from.id.toString())) return ctx.reply('Тільки для оргів!');
     const config = loadConfigDB();
     config.performerTicketsOpen = false;
     saveConfigDB(config);
     ctx.reply('🔴 Продаж квитків для виступаючих закрито.');
-});
+}
 
-bot.command('stats', (ctx) => {
+function sendStats(ctx) {
     if (!isAdmin(ctx.from.id.toString())) return ctx.reply('Тільки для оргів!');
 
     const ticketsDb = loadDB();
@@ -286,7 +286,11 @@ bot.command('stats', (ctx) => {
     const stats = computeStats(ticketsDb, requestsDb);
 
     ctx.reply(formatStatsMessage(stats, config.performerTicketsOpen));
-});
+}
+
+bot.command('performer_open', openPerformerSales);
+bot.command('performer_close', closePerformerSales);
+bot.command('stats', sendStats);
 
 bot.catch((err, ctx) => {
     console.log('Помилка обробки оновлення:', err);
