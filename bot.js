@@ -44,7 +44,11 @@ function saveReqDB(data) {
 function loadAdminsDB() {
     const currentPath = fs.existsSync(adminsDbPath) ? adminsDbPath : path.join(__dirname, 'admins.json');
     if (!fs.existsSync(currentPath)) fs.writeFileSync(currentPath, JSON.stringify(DEFAULT_ADMIN_IDS));
-    return JSON.parse(fs.readFileSync(currentPath));
+    try {
+        const parsed = JSON.parse(fs.readFileSync(currentPath));
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+    } catch (e) { console.log('admins.json пошкоджено — використовую DEFAULT_ADMIN_IDS'); }
+    return DEFAULT_ADMIN_IDS;
 }
 
 function saveAdminsDB(adminIds) {
@@ -282,6 +286,10 @@ bot.command('stats', (ctx) => {
     const stats = computeStats(ticketsDb, requestsDb);
 
     ctx.reply(formatStatsMessage(stats, config.performerTicketsOpen));
+});
+
+bot.catch((err, ctx) => {
+    console.log('Помилка обробки оновлення:', err);
 });
 
 bot.launch();
