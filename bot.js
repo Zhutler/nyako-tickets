@@ -2,7 +2,7 @@ const { Telegraf, Markup } = require('telegraf');
 const QRCode = require('qrcode');
 const fs = require('fs');
 const path = require('path');
-const { isValidTelegramId, addAdminId, removeAdminId } = require('./logic');
+const { computeStats, formatStatsMessage, isValidTelegramId, addAdminId, removeAdminId } = require('./logic');
 
 // Бот берет токен из скрытых настроек Railway
 const bot = new Telegraf(process.env.BOT_TOKEN);
@@ -267,6 +267,17 @@ bot.command('performer_close', (ctx) => {
     config.performerTicketsOpen = false;
     saveConfigDB(config);
     ctx.reply('🔴 Продаж квитків для виступаючих закрито.');
+});
+
+bot.command('stats', (ctx) => {
+    if (!isAdmin(ctx.from.id.toString())) return ctx.reply('Тільки для оргів!');
+
+    const ticketsDb = loadDB();
+    const requestsDb = loadReqDB();
+    const config = loadConfigDB();
+    const stats = computeStats(ticketsDb, requestsDb);
+
+    ctx.reply(formatStatsMessage(stats, config.performerTicketsOpen));
 });
 
 bot.launch();
