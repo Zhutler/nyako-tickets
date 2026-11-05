@@ -405,15 +405,21 @@ bot.command('reset_tickets', (ctx) => {
     if (!isAdmin(ctx.from.id.toString())) return ctx.reply('Тільки для оргів!');
 
     const ticketsDb = loadDB();
+    const requestsDb = loadReqDB();
     const count = Object.keys(ticketsDb).length;
     const confirmed = ctx.message.text.split(' ')[1] === 'confirm';
 
     if (!confirmed) {
-        return ctx.reply(`⚠️ Це видалить ВСІ ${count} квитків без можливості відновлення.\n\nЩоб підтвердити, напиши: /reset_tickets confirm`);
+        return ctx.reply(`⚠️ Це обнулить статистику: ${count} квитків і всі незавершені покупки буде перенесено в архів, а продажі почнуться з нуля.\n\nЩоб підтвердити, напиши: /reset_tickets confirm`);
     }
 
+    // Спершу архів, потім очищення: якщо архів не запишеться, нічого не зітреться.
+    const archivedAt = new Date().toISOString();
+    const archiveFile = `archive-${archivedAt.replace(/[:.]/g, '-')}.json`;
+    saveJson(archiveFile, { archivedAt, tickets: ticketsDb, requests: requestsDb });
     saveDB({});
-    ctx.reply(`✅ Список квитків очищено. Видалено: ${count}.`);
+    saveReqDB({});
+    ctx.reply(`✅ Статистику обнулено. ${count} квитків перенесено в архів (${archiveFile}).`);
 });
 
 // Останній обробник: усе, що не розпізнали вище. Якщо людина чекає на оплату,

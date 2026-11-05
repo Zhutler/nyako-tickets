@@ -189,6 +189,47 @@ test('non-admin sharing a contact cannot add scanners', async () => {
     assert.ok(!fs.existsSync(scannersFile) || readData('scanners.json').length === 0, 'nobody was added');
 });
 
+test('/reset_tickets without confirm only warns, changes nothing', async () => {
+    resetData();
+    fs.writeFileSync(path.join(DATA_DIR, 'tickets.json'), JSON.stringify({ a: { used: true, type: 'Класичний' } }));
+    await send(text(ADMIN, '/reset_tickets'));
+    assert.match(repliesTo(ADMIN)[0], /архів/);
+    assert.match(repliesTo(ADMIN)[0], /\/reset_tickets confirm/);
+    assert.equal(Object.keys(readData('tickets.json')).length, 1);
+    assert.equal(fs.readdirSync(DATA_DIR).filter(f => f.startsWith('archive-')).length, 0);
+});
+
+test('/reset_tickets confirm archives tickets and pending purchases, then starts from zero', async () => {
+    resetData();
+    const tickets = { a: { used: true, type: 'Класичний' }, b: { used: false, type: 'Для виступаючих' } };
+    const requests = { [`draft_${BUYER}`]: { ticketType: 'Класичний', count: 1 }, tx_1: { userId: OTHER, ticketType: 'Класичний', count: 2, adminMsgs: [] } };
+    fs.writeFileSync(path.join(DATA_DIR, 'tickets.json'), JSON.stringify(tickets));
+    fs.writeFileSync(path.join(DATA_DIR, 'requests.json'), JSON.stringify(requests));
+
+    await send(text(ADMIN, '/reset_tickets confirm'));
+
+    const archives = fs.readdirSync(DATA_DIR).filter(f => f.startsWith('archive-') && f.endsWith('.json'));
+    assert.equal(archives.length, 1);
+    const archive = readData(archives[0]);
+    assert.deepEqual(archive.tickets, tickets);
+    assert.deepEqual(archive.requests, requests);
+    assert.ok(archive.archivedAt);
+    assert.match(repliesTo(ADMIN)[0], new RegExp(archives[0]));
+
+    assert.deepEqual(readData('tickets.json'), {});
+    assert.deepEqual(readData('requests.json'), {});
+    await send(text(ADMIN, '/stats'));
+    assert.match(repliesTo(ADMIN)[0], /Продано квитків: 0/);
+});
+
+test('/reset_tickets is admin-only', async () => {
+    resetData();
+    fs.writeFileSync(path.join(DATA_DIR, 'tickets.json'), JSON.stringify({ a: { used: true, type: 'Класичний' } }));
+    await send(text(BUYER, '/reset_tickets confirm'));
+    assert.deepEqual(repliesTo(BUYER), ['Тільки для оргів!']);
+    assert.equal(Object.keys(readData('tickets.json')).length, 1);
+});
+
 async function fetchStats(key) {
     const server = createStatsApp('s3cret').listen(0);
     await new Promise(r => server.once('listening', r));
