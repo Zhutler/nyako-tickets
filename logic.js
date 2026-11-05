@@ -8,16 +8,19 @@ function computeStats(ticketsDb, requestsDb) {
     const byType = {};
     let redeemed = 0;
 
-    for (const ticket of Object.values(ticketsDb)) {
+    const realTickets = Object.values(ticketsDb).filter(ticket => !ticket.test);
+
+    for (const ticket of realTickets) {
         if (!byType[ticket.type]) byType[ticket.type] = { count: 0, revenue: 0 };
         byType[ticket.type].count += 1;
         byType[ticket.type].revenue += priceFor(ticket.type);
         if (ticket.used) redeemed += 1;
     }
 
-    const totalSold = Object.keys(ticketsDb).length;
+    const totalSold = realTickets.length;
     const totalRevenue = Object.values(byType).reduce((sum, t) => sum + t.revenue, 0);
-    const pendingCount = Object.keys(requestsDb).filter(key => key.startsWith('tx_')).length;
+    const pendingCount = Object.entries(requestsDb)
+        .filter(([key, tx]) => key.startsWith('tx_') && !tx.test).length;
 
     return { totalSold, byType, redeemed, totalRevenue, pendingCount };
 }
@@ -56,4 +59,8 @@ function removeScannerId(scannerIds, idStr) {
     return { scannerIds: scannerIds.filter(id => id !== idStr), removed: true, reason: null };
 }
 
-module.exports = { computeStats, formatStatsMessage, priceFor, TICKET_TYPES, isValidTelegramId, addAdminId, removeAdminId, removeScannerId };
+function isImageDocument(doc) {
+    return Boolean(doc) && typeof doc.mime_type === 'string' && doc.mime_type.startsWith('image/');
+}
+
+module.exports = { isImageDocument,computeStats, formatStatsMessage, priceFor, TICKET_TYPES, isValidTelegramId, addAdminId, removeAdminId, removeScannerId };

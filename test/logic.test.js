@@ -1,5 +1,5 @@
 const assert = require('assert/strict');
-const { computeStats, formatStatsMessage, priceFor, TICKET_TYPES, isValidTelegramId, addAdminId, removeAdminId, removeScannerId } = require('../logic');
+const { computeStats, formatStatsMessage, priceFor, TICKET_TYPES, isValidTelegramId, addAdminId, removeAdminId, removeScannerId, isImageDocument } = require('../logic');
 
 function test(name, fn) {
     try {
@@ -143,4 +143,34 @@ test('removeScannerId: removes the last remaining scanner (no last-entry protect
 test('removeScannerId: reports not_found for unknown id', () => {
     const result = removeScannerId(['111', '222'], '999');
     assert.deepEqual(result, { scannerIds: ['111', '222'], removed: false, reason: 'not_found' });
+});
+
+test('computeStats: ignores test tickets and test receipts', () => {
+    const ticketsDb = {
+        't1': { used: true, type: 'Класичний' },
+        't2': { used: true, type: 'Класичний', test: true },
+        't3': { used: false, type: 'Для виступаючих', test: true }
+    };
+    const requestsDb = {
+        'tx_1': { userId: 1, ticketType: 'Класичний', count: 1, adminMsgs: [] },
+        'tx_2': { userId: 2, ticketType: 'Класичний', count: 1, adminMsgs: [], test: true }
+    };
+    assert.deepEqual(computeStats(ticketsDb, requestsDb), {
+        totalSold: 1,
+        byType: { 'Класичний': { count: 1, revenue: 300 } },
+        redeemed: 1,
+        totalRevenue: 300,
+        pendingCount: 1
+    });
+});
+
+test('isImageDocument: accepts image files sent as documents', () => {
+    assert.equal(isImageDocument({ file_id: 'x', mime_type: 'image/jpeg' }), true);
+    assert.equal(isImageDocument({ file_id: 'x', mime_type: 'image/png' }), true);
+});
+
+test('isImageDocument: rejects non-image documents and missing input', () => {
+    assert.equal(isImageDocument({ file_id: 'x', mime_type: 'application/pdf' }), false);
+    assert.equal(isImageDocument({ file_id: 'x' }), false);
+    assert.equal(isImageDocument(undefined), false);
 });

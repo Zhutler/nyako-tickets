@@ -27,6 +27,7 @@
 </head>
 <body>
     <div class="header"><h1>✨ Nyako-kon</h1><p>Оберіть квитки</p></div>
+    <div id="test-banner" style="display:none; background:#3a2f00; color:#ffd54a; border:1px solid #ffd54a; border-radius:12px; padding:10px 14px; margin-bottom:16px; width:100%; max-width:350px; text-align:center; font-weight:700;">🧪 ТЕСТОВИЙ РЕЖИМ — не йде в статистику</div>
 
     <div class="ticket-card">
         <div style="display:flex; justify-content: space-between; align-items:center;">
@@ -55,13 +56,17 @@
 
     <script>
         const tg = window.Telegram.WebApp; tg.expand();
+        const isTest = new URLSearchParams(location.search).get('test') === '1';
+        if (isTest) document.getElementById('test-banner').style.display = 'block';
         let counts = { 1: 1, 2: 1 };
         function change(id, delta) {
             counts[id] = Math.max(1, Math.min(10, counts[id] + delta));
             document.getElementById('cnt' + id).innerText = counts[id];
         }
         function send(id, name) {
-            tg.sendData(JSON.stringify({ ticket: name, count: counts[id] }));
+            const payload = { ticket: name, count: counts[id] };
+            if (isTest) payload.test = true;
+            tg.sendData(JSON.stringify(payload));
             tg.close();
         }
     </script>
