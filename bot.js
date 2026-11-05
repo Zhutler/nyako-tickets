@@ -6,14 +6,17 @@ const path = require('path');
 const express = require('express');
 const crypto = require('crypto');
 const { computeStats, formatStatsMessage, priceFor, TICKET_TYPES, isValidTelegramId, addAdminId, removeAdminId, removeScannerId, isImageDocument, statsToSheetRows, rowsToCsv } = require('./logic');
+const event = require('./event'); // усе, що відрізняє Nyako-kon від Dristic-con
 
 // Бот берет токен из скрытых настроек Railway
 const bot = new Telegraf(process.env.BOT_TOKEN);
-const DEFAULT_ADMIN_IDS = ['789355423', '821782817', '678439277', '1672507362', '1089717768', '8595175426']; // Використовується лише для первинної міграції admins.json
-const APP_URL = 'https://zhutler.github.io/nyako-tickets/app.html?v=6';
+const DEFAULT_ADMIN_IDS = event.defaultAdminIds; // Використовується лише для первинної міграції admins.json
+const APP_URL = event.appUrl;
 const TEST_APP_URL = `${APP_URL}&test=1`;
-const SCANNER_URL = 'https://zhutler.github.io/nyako-tickets/scanner.html?v=1';
-const SCANNER_REQUEST_ID = 1; // request_id для кнопки вибору контакту "Додати сканера"
+const SCANNER_URL = event.scannerUrl;
+// request_id для кнопок вибору контакту
+const SCANNER_REQUEST_ID = 1; // "Додати сканера"
+const ADMIN_REQUEST_ID = 2;   // "Додати адміна"
 
 // На Railway це постійний диск /data. DATA_DIR можна перевизначити (наприклад, для тестів).
 const DATA_DIR = process.env.DATA_DIR || '/data';
@@ -89,11 +92,11 @@ bot.start(async (ctx) => {
     }
     if (userIsAdmin) {
         buttons.push(['📊 Статистика', Markup.button.webApp('🧪 Тест', TEST_APP_URL)]);
-        buttons.push(['➕ Додати адміна', '➖ Видалити адміна']);
+        buttons.push([Markup.button.userRequest('➕ Додати адміна', ADMIN_REQUEST_ID), '➖ Видалити адміна']);
         buttons.push([Markup.button.userRequest('➕ Додати сканера', SCANNER_REQUEST_ID)]);
         buttons.push(['🟢 Увімкнути виступаючих', '🔴 Вимкнути виступаючих']);
     }
-    ctx.reply('Вітаємо на Nyako-kon! 🎫', Markup.keyboard(buttons).resize());
+    ctx.reply(`Вітаємо на ${event.name}! 🎫`, Markup.keyboard(buttons).resize());
 });
 
 bot.on('message', async (ctx, next) => {
@@ -138,7 +141,7 @@ bot.on('message', async (ctx, next) => {
             reqDb[`draft_${userId}`] = { ticketType: data.ticket, count: data.count, ...(isTest ? { test: true } : {}) };
             saveReqDB(reqDb);
 
-            return ctx.reply(`${isTest ? TEST_MARK : ''}Обрано: ${data.ticket} - ${data.count} шт.\n\nСума: ${totalSum} ₴\nКартка: 💳 4149 6090 6948 0624\n\nКидай скрін чека!`);
+            return ctx.reply(`${isTest ? TEST_MARK : ''}Обрано: ${data.ticket} - ${data.count} шт.\n\nСума: ${totalSum} ₴\nКартка: 💳 ${event.card}\n\nКидай скрін чека!`);
         } catch (e) {
             return ctx.reply('Помилка даних. Спробуй ще раз.');
         }
@@ -220,7 +223,7 @@ bot.action(/confirm_(.+)/, async (ctx) => {
         const mark = tx.test ? TEST_MARK : '';
 
         for (let i = 0; i < tx.count; i++) {
-            const tId = `NYAKO_${userId}_${Math.random().toString(36).substring(7)}`;
+            const tId = `${event.ticketPrefix}_${userId}_${Math.random().toString(36).substring(7)}`;
             db[tId] = { used: false, owner: userId, type: tx.ticketType, date: new Date().toISOString(), ...(tx.test ? { test: true } : {}) };
             const qrBuf = await QRCode.toBuffer(tId);
             ticketsToSend.push({ type: 'photo', media: { source: qrBuf } });
@@ -334,42 +337,44 @@ bot.hears('📊 Статистика', sendStats);
 bot.hears('🟢 Увімкнути виступаючих', openPerformerSales);
 bot.hears('🔴 Вимкнути виступаючих', closePerformerSales);
 
-bot.hears('➕ Додати адміна', (ctx) => {
-    if (!isAdmin(ctx.from.id.toString())) return ctx.reply('Тільки для оргів!');
-    ctx.reply('Щоб додати адміна, напиши команду:\n/addadmin <telegram_id>\n\nID можна дізнатись командою /myid — нехай новий адмін напише її сам і надішле тобі результат.');
-});
-
 bot.hears('➖ Видалити адміна', (ctx) => {
     if (!isAdmin(ctx.from.id.toString())) return ctx.reply('Тільки для оргів!');
     const admins = loadAdminsDB();
     ctx.reply(`Щоб видалити адміна, напиши команду:\n/removeadmin <telegram_id>\n\nПоточні адміни:\n${admins.join('\n')}`);
 });
 
-// Кнопка "➕ Додати сканера" відкриває список контактів; Telegram повертає вибраних користувачів
+// Кнопки "➕ Додати адміна" / "➕ Додати сканера" відкривають список контактів;
+// Telegram повертає вибраних користувачів з request_id тієї кнопки, яку натиснули.
+const CONTACT_PICKERS = {
+    [ADMIN_REQUEST_ID]: { load: loadAdminsDB, save: saveAdminsDB, addedLabel: 'адміна', countLabel: 'адмінів', alreadyLabel: 'Вже адмін' },
+    [SCANNER_REQUEST_ID]: { load: loadScannersDB, save: saveScannersDB, addedLabel: 'сканера', countLabel: 'сканерів', alreadyLabel: 'Вже сканер' }
+};
+
 bot.on(message('users_shared'), (ctx, next) => {
     const shared = ctx.message.users_shared;
-    if (shared.request_id !== SCANNER_REQUEST_ID) return next();
+    const picker = CONTACT_PICKERS[shared.request_id];
+    if (!picker) return next();
     if (!isAdmin(ctx.from.id.toString())) return ctx.reply('Тільки для оргів!');
 
-    let scanners = loadScannersDB();
+    let ids = picker.load();
     const added = [];
     const already = [];
     for (const user of shared.users) {
         const id = user.user_id.toString();
-        const result = addAdminId(scanners, id);
+        const result = addAdminId(ids, id);
         if (result.added) {
-            scanners = result.adminIds;
+            ids = result.adminIds;
             added.push(id);
         } else {
             already.push(id);
         }
     }
 
-    if (added.length) saveScannersDB(scanners);
+    if (added.length) picker.save(ids);
 
     const lines = [];
-    if (added.length) lines.push(`✅ Додано сканера: ${added.join(', ')}. Всього сканерів: ${scanners.length}`);
-    if (already.length) lines.push(`Вже сканер: ${already.join(', ')}`);
+    if (added.length) lines.push(`✅ Додано ${picker.addedLabel}: ${added.join(', ')}. Всього ${picker.countLabel}: ${ids.length}`);
+    if (already.length) lines.push(`${picker.alreadyLabel}: ${already.join(', ')}`);
     ctx.reply(lines.join('\n'));
 });
 
@@ -456,7 +461,7 @@ function createStatsApp(statsKey) {
 
 if (require.main === module) {
     bot.launch();
-    console.log('Бот Nyako-kon: анти-скам і фікс синьої кнопки завантажено!');
+    console.log(`Бот ${event.name}: запущено!`);
 
     if (process.env.STATS_KEY) {
         const port = process.env.PORT || 3000;

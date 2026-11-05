@@ -1,5 +1,10 @@
 const assert = require('assert/strict');
 const { computeStats, formatStatsMessage, priceFor, TICKET_TYPES, isValidTelegramId, addAdminId, removeAdminId, removeScannerId, isImageDocument, statsToSheetRows, rowsToCsv } = require('../logic');
+const event = require('../event');
+
+// Ціни беремо з налаштувань івенту, щоб ті самі тести працювали і в Nyako, і в Dristic.
+const CLASSIC = event.prices['Класичний'];
+const PERFORMER = event.prices['Для виступаючих'];
 
 function test(name, fn) {
     try {
@@ -38,11 +43,11 @@ test('computeStats: counts tickets by type, revenue, and redemption', () => {
     assert.deepEqual(stats, {
         totalSold: 3,
         byType: {
-            'Класичний': { count: 2, revenue: 600 },
-            'Для виступаючих': { count: 1, revenue: 250 }
+            'Класичний': { count: 2, revenue: 2 * CLASSIC },
+            'Для виступаючих': { count: 1, revenue: PERFORMER }
         },
         redeemed: 1,
-        totalRevenue: 850,
+        totalRevenue: 2 * CLASSIC + PERFORMER,
         pendingCount: 2
     });
 });
@@ -114,20 +119,33 @@ test('removeAdminId: reports not_found for unknown id', () => {
     assert.deepEqual(result, { adminIds: ['111', '222'], removed: false, reason: 'not_found' });
 });
 
-test('priceFor: prices Класичний at 300', () => {
-    assert.equal(priceFor('Класичний'), 300);
+test('formatStatsMessage: title uses the event name', () => {
+    const msg = formatStatsMessage({ totalSold: 0, byType: {}, redeemed: 0, totalRevenue: 0, pendingCount: 0 }, true);
+    assert.ok(msg.startsWith(`📊 ${event.name} — статистика`), msg.split('\n')[0]);
 });
 
-test('priceFor: prices Для виступаючих at 250', () => {
-    assert.equal(priceFor('Для виступаючих'), 250);
+test('priceFor: uses the event price for each ticket type', () => {
+    assert.equal(priceFor('Класичний'), CLASSIC);
+    assert.equal(priceFor('Для виступаючих'), PERFORMER);
 });
 
-test('priceFor: falls back to 250 for unknown ticket types (historical data)', () => {
-    assert.equal(priceFor('bogus'), 250);
+test('priceFor: unknown ticket types count as 0 (not invented revenue)', () => {
+    assert.equal(priceFor('bogus'), 0);
 });
 
-test('TICKET_TYPES: contains exactly the two known ticket types', () => {
-    assert.deepEqual(TICKET_TYPES, { 'Класичний': 300, 'Для виступаючих': 250 });
+test('TICKET_TYPES: comes from the event config, both types present with positive prices', () => {
+    assert.deepEqual(TICKET_TYPES, event.prices);
+    assert.deepEqual(Object.keys(TICKET_TYPES).sort(), ['Для виступаючих', 'Класичний'].sort());
+    assert.ok(Object.values(TICKET_TYPES).every(p => Number.isInteger(p) && p > 0));
+});
+
+test('event config: has everything the bot needs', () => {
+    for (const key of ['name', 'ticketPrefix', 'card', 'appUrl', 'scannerUrl']) {
+        assert.equal(typeof event[key], 'string', key);
+        assert.ok(event[key].length > 0, key);
+    }
+    assert.ok(event.defaultAdminIds.length > 0);
+    assert.ok(event.defaultAdminIds.every(isValidTelegramId));
 });
 
 test('removeScannerId: removes an existing id', () => {
@@ -157,9 +175,9 @@ test('computeStats: ignores test tickets and test receipts', () => {
     };
     assert.deepEqual(computeStats(ticketsDb, requestsDb), {
         totalSold: 1,
-        byType: { 'Класичний': { count: 1, revenue: 300 } },
+        byType: { 'Класичний': { count: 1, revenue: CLASSIC } },
         redeemed: 1,
-        totalRevenue: 300,
+        totalRevenue: CLASSIC,
         pendingCount: 1
     });
 });

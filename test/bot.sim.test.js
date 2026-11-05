@@ -11,8 +11,11 @@ process.env.BOT_TOKEN = '123456:SIMULATION';
 
 const { Telegram } = require('telegraf');
 const { bot, createStatsApp } = require('../bot');
+const event = require('../event');
 
-const ADMIN = 789355423; // з DEFAULT_ADMIN_IDS
+const ADMIN = Number(event.defaultAdminIds[0]); // перший стартовий адмін івенту
+const CLASSIC = event.prices['Класичний'];
+const PERFORMER = event.prices['Для виступаючих'];
 const BUYER = 111222333;
 const OTHER = 444555666;
 
@@ -66,6 +69,45 @@ test('/start: admin sees Test web-app button and contact-picker "Додати с
     assert.ok(testBtn && testBtn.web_app.url.endsWith('&test=1'), 'Test button opens app with test=1');
     const scannerBtn = kb.find(b => b.text === '➕ Додати сканера');
     assert.equal(scannerBtn.request_users.request_id, 1);
+    const adminBtn = kb.find(b => b.text === '➕ Додати адміна');
+    assert.equal(adminBtn.request_users.request_id, 2, 'Додати адміна також відкриває контакти');
+});
+
+test('/start: welcome and buy button use the event config', async () => {
+    await send(text(BUYER, '/start'));
+    const sent = calls.find(c => c.method === 'sendMessage').payload;
+    assert.match(sent.text, new RegExp(event.name));
+    assert.equal(keyboardOf(calls)[0].web_app.url, event.appUrl);
+});
+
+test('admin picks a contact via "Додати адміна" → becomes admin', async () => {
+    resetData();
+    await send(usersShared(ADMIN, 2, [OTHER]));
+    assert.match(repliesTo(ADMIN)[0], /✅ Додано адміна/);
+    assert.ok(readData('admins.json').includes(String(OTHER)));
+
+    await send(usersShared(ADMIN, 2, [OTHER]));
+    assert.match(repliesTo(ADMIN)[0], /Вже адмін/);
+
+    await send(text(OTHER, '/stats'));
+    assert.match(repliesTo(OTHER)[0], /статистика/);
+});
+
+test('non-admin sharing a contact cannot add admins', async () => {
+    resetData();
+    await send(usersShared(BUYER, 2, [OTHER]));
+    assert.deepEqual(repliesTo(BUYER), ['Тільки для оргів!']);
+    assert.ok(!readData('admins.json').includes(String(OTHER)));
+});
+
+test('confirmed tickets use the event ticket prefix and card number', async () => {
+    resetData();
+    await send(webApp(BUYER, { ticket: 'Класичний', count: 1 }));
+    assert.match(repliesTo(BUYER)[0], new RegExp(event.card));
+    await send(photo(BUYER));
+    const txId = Object.keys(readData('requests.json')).find(k => k.startsWith('tx_'));
+    await send(callback(ADMIN, `confirm_${txId}`));
+    assert.ok(Object.keys(readData('tickets.json')).every(id => id.startsWith(`${event.ticketPrefix}_`)));
 });
 
 test('/start: regular buyer sees only the buy button', async () => {
@@ -117,7 +159,7 @@ test('real purchase still counts in /stats', async () => {
     await send(callback(ADMIN, `confirm_${txId}`));
     await send(text(ADMIN, '/stats'));
     assert.match(repliesTo(ADMIN)[0], /Продано квитків: 1/);
-    assert.match(repliesTo(ADMIN)[0], /Загальна сума: 300 ₴/);
+    assert.match(repliesTo(ADMIN)[0], new RegExp(`Загальна сума: ${CLASSIC} ₴`));
 });
 
 test('performer sales closed: real purchase blocked, admin test purchase allowed', async () => {
@@ -261,11 +303,11 @@ test('sheet endpoint: returns sales CSV, test tickets excluded', async () => {
         'Показник,Значення',
         'Продано квитків,2',
         'Класичний (шт),1',
-        'Класичний (₴),300',
+        `Класичний (₴),${CLASSIC}`,
         'Для виступаючих (шт),1',
-        'Для виступаючих (₴),250',
+        `Для виступаючих (₴),${PERFORMER}`,
         'Погашено на вході,1',
-        'Загальна сума (₴),550'
+        `Загальна сума (₴),${CLASSIC + PERFORMER}`
     ]);
     assert.match(lines[8], /^Оновлено,/);
 });

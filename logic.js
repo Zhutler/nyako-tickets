@@ -1,7 +1,10 @@
-const TICKET_TYPES = { 'Класичний': 300, 'Для виступаючих': 250 };
+const { prices, name: eventName } = require('./event');
+
+// Ціни беруться з налаштувань івенту (event.js).
+const TICKET_TYPES = prices;
 
 function priceFor(ticketType) {
-    return TICKET_TYPES[ticketType] || 250;
+    return TICKET_TYPES[ticketType] || 0;
 }
 
 function computeStats(ticketsDb, requestsDb) {
@@ -30,7 +33,7 @@ function formatStatsMessage(stats, performerOpen) {
     const performer = stats.byType['Для виступаючих'] || { count: 0, revenue: 0 };
     const performerStatus = performerOpen ? '🟢 відкрито' : '🔴 закрито';
 
-    return `📊 Nyako-kon — статистика\n\n` +
+    return `📊 ${eventName} — статистика\n\n` +
         `Продано квитків: ${stats.totalSold}\n` +
         ` • Класичний: ${classic.count} (${classic.revenue} ₴)\n` +
         ` • Для виступаючих: ${performer.count} (${performer.revenue} ₴, ${performerStatus})\n\n` +
