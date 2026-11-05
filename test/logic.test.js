@@ -1,5 +1,5 @@
 const assert = require('assert/strict');
-const { computeStats, formatStatsMessage, priceFor, TICKET_TYPES, isValidTelegramId, addAdminId, removeAdminId, removeScannerId, isImageDocument } = require('../logic');
+const { computeStats, formatStatsMessage, priceFor, TICKET_TYPES, isValidTelegramId, addAdminId, removeAdminId, removeScannerId, isImageDocument, statsToSheetRows, rowsToCsv } = require('../logic');
 
 function test(name, fn) {
     try {
@@ -167,6 +167,41 @@ test('computeStats: ignores test tickets and test receipts', () => {
 test('isImageDocument: accepts image files sent as documents', () => {
     assert.equal(isImageDocument({ file_id: 'x', mime_type: 'image/jpeg' }), true);
     assert.equal(isImageDocument({ file_id: 'x', mime_type: 'image/png' }), true);
+});
+
+test('statsToSheetRows: only sales figures, numbers stay numbers', () => {
+    const stats = {
+        totalSold: 12,
+        byType: { 'Класичний': { count: 8, revenue: 2400 }, 'Для виступаючих': { count: 4, revenue: 1000 } },
+        redeemed: 5,
+        totalRevenue: 3400,
+        pendingCount: 2
+    };
+    assert.deepEqual(statsToSheetRows(stats, '05.11.2026, 14:30:00'), [
+        ['Показник', 'Значення'],
+        ['Продано квитків', 12],
+        ['Класичний (шт)', 8],
+        ['Класичний (₴)', 2400],
+        ['Для виступаючих (шт)', 4],
+        ['Для виступаючих (₴)', 1000],
+        ['Погашено на вході', 5],
+        ['Загальна сума (₴)', 3400],
+        ['Оновлено', '05.11.2026, 14:30:00']
+    ]);
+});
+
+test('statsToSheetRows: missing ticket types show as zero', () => {
+    const rows = statsToSheetRows({ totalSold: 0, byType: {}, redeemed: 0, totalRevenue: 0, pendingCount: 0 }, 'x');
+    assert.deepEqual(rows.slice(2, 6), [
+        ['Класичний (шт)', 0], ['Класичний (₴)', 0], ['Для виступаючих (шт)', 0], ['Для виступаючих (₴)', 0]
+    ]);
+});
+
+test('rowsToCsv: quotes fields with commas or quotes', () => {
+    assert.equal(
+        rowsToCsv([['Показник', 'Значення'], ['Оновлено', '05.11.2026, 14:30:00'], ['Назва "x"', 5]]),
+        'Показник,Значення\nОновлено,"05.11.2026, 14:30:00"\n"Назва ""x""",5\n'
+    );
 });
 
 test('isImageDocument: rejects non-image documents and missing input', () => {

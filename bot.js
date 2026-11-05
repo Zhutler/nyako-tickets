@@ -3,7 +3,9 @@ const { message } = require('telegraf/filters');
 const QRCode = require('qrcode');
 const fs = require('fs');
 const path = require('path');
-const { computeStats, formatStatsMessage, priceFor, TICKET_TYPES, isValidTelegramId, addAdminId, removeAdminId, removeScannerId, isImageDocument } = require('./logic');
+const express = require('express');
+const crypto = require('crypto');
+const { computeStats, formatStatsMessage, priceFor, TICKET_TYPES, isValidTelegramId, addAdminId, removeAdminId, removeScannerId, isImageDocument, statsToSheetRows, rowsToCsv } = require('./logic');
 
 // Бот берет токен из скрытых настроек Railway
 const bot = new Telegraf(process.env.BOT_TOKEN);
@@ -427,12 +429,36 @@ bot.catch((err, ctx) => {
     console.log('Помилка обробки оновлення:', err);
 });
 
+// Статистика для Google-таблиці (кошторису): таблиця тягне її формулою IMPORTDATA.
+// Доступ лише з правильним ключем (?key=...), тестові квитки не враховуються.
+function keyMatches(given, expected) {
+    const a = Buffer.from(String(given || ''));
+    const b = Buffer.from(String(expected));
+    return a.length === b.length && crypto.timingSafeEqual(a, b);
+}
+
+function createStatsApp(statsKey) {
+    const app = express();
+    app.get('/stats.csv', (req, res) => {
+        if (!keyMatches(req.query.key, statsKey)) return res.status(403).send('Forbidden');
+        const stats = computeStats(loadDB(), loadReqDB());
+        const updatedAt = new Date().toLocaleString('uk-UA', { timeZone: 'Europe/Kyiv' });
+        res.type('text/csv; charset=utf-8').send(rowsToCsv(statsToSheetRows(stats, updatedAt)));
+    });
+    return app;
+}
+
 if (require.main === module) {
     bot.launch();
     console.log('Бот Nyako-kon: анти-скам і фікс синьої кнопки завантажено!');
+
+    if (process.env.STATS_KEY) {
+        const port = process.env.PORT || 3000;
+        createStatsApp(process.env.STATS_KEY).listen(port, () => console.log(`Статистика для таблиці: порт ${port}`));
+    }
 
     process.once('SIGINT', () => bot.stop('SIGINT'));
     process.once('SIGTERM', () => bot.stop('SIGTERM'));
 }
 
-module.exports = { bot };
+module.exports = { bot, createStatsApp };

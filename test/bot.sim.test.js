@@ -10,7 +10,7 @@ process.env.DATA_DIR = DATA_DIR;
 process.env.BOT_TOKEN = '123456:SIMULATION';
 
 const { Telegram } = require('telegraf');
-const { bot } = require('../bot');
+const { bot, createStatsApp } = require('../bot');
 
 const ADMIN = 789355423; // з DEFAULT_ADMIN_IDS
 const BUYER = 111222333;
@@ -187,6 +187,46 @@ test('non-admin sharing a contact cannot add scanners', async () => {
     assert.deepEqual(repliesTo(BUYER), ['Тільки для оргів!']);
     const scannersFile = path.join(DATA_DIR, 'scanners.json');
     assert.ok(!fs.existsSync(scannersFile) || readData('scanners.json').length === 0, 'nobody was added');
+});
+
+async function fetchStats(key) {
+    const server = createStatsApp('s3cret').listen(0);
+    await new Promise(r => server.once('listening', r));
+    try {
+        const res = await fetch(`http://127.0.0.1:${server.address().port}/stats.csv${key === undefined ? '' : `?key=${key}`}`);
+        return { status: res.status, type: res.headers.get('content-type'), body: await res.text() };
+    } finally {
+        server.close();
+    }
+}
+
+test('sheet endpoint: wrong or missing key is rejected', async () => {
+    assert.equal((await fetchStats('nope')).status, 403);
+    assert.equal((await fetchStats()).status, 403);
+});
+
+test('sheet endpoint: returns sales CSV, test tickets excluded', async () => {
+    resetData();
+    fs.writeFileSync(path.join(DATA_DIR, 'tickets.json'), JSON.stringify({
+        a: { used: true, type: 'Класичний' },
+        b: { used: false, type: 'Для виступаючих' },
+        c: { used: true, type: 'Класичний', test: true }
+    }));
+    const res = await fetchStats('s3cret');
+    assert.equal(res.status, 200);
+    assert.match(res.type, /text\/csv/);
+    const lines = res.body.trim().split('\n');
+    assert.deepEqual(lines.slice(0, 8), [
+        'Показник,Значення',
+        'Продано квитків,2',
+        'Класичний (шт),1',
+        'Класичний (₴),300',
+        'Для виступаючих (шт),1',
+        'Для виступаючих (₴),250',
+        'Погашено на вході,1',
+        'Загальна сума (₴),550'
+    ]);
+    assert.match(lines[8], /^Оновлено,/);
 });
 
 (async () => {

@@ -59,8 +59,34 @@ function removeScannerId(scannerIds, idStr) {
     return { scannerIds: scannerIds.filter(id => id !== idStr), removed: true, reason: null };
 }
 
+// Рядки для вкладки "Квитки (бот)" у кошторисі: лише продажі, числа лишаються числами.
+function statsToSheetRows(stats, updatedAt) {
+    const classic = stats.byType['Класичний'] || { count: 0, revenue: 0 };
+    const performer = stats.byType['Для виступаючих'] || { count: 0, revenue: 0 };
+    return [
+        ['Показник', 'Значення'],
+        ['Продано квитків', stats.totalSold],
+        ['Класичний (шт)', classic.count],
+        ['Класичний (₴)', classic.revenue],
+        ['Для виступаючих (шт)', performer.count],
+        ['Для виступаючих (₴)', performer.revenue],
+        ['Погашено на вході', stats.redeemed],
+        ['Загальна сума (₴)', stats.totalRevenue],
+        ['Оновлено', updatedAt]
+    ];
+}
+
+function csvField(value) {
+    const s = String(value);
+    return /[",\n\r]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+}
+
+function rowsToCsv(rows) {
+    return rows.map(row => row.map(csvField).join(',')).join('\n') + '\n';
+}
+
 function isImageDocument(doc) {
     return Boolean(doc) && typeof doc.mime_type === 'string' && doc.mime_type.startsWith('image/');
 }
 
-module.exports = { isImageDocument,computeStats, formatStatsMessage, priceFor, TICKET_TYPES, isValidTelegramId, addAdminId, removeAdminId, removeScannerId };
+module.exports = { computeStats, formatStatsMessage, priceFor, TICKET_TYPES, isValidTelegramId, addAdminId, removeAdminId, removeScannerId, isImageDocument, statsToSheetRows, rowsToCsv };
